@@ -10,9 +10,6 @@ from utils.data_loader import DataLoader
 
 class CoralRestorationBCA:
     def __init__(self, config_path):
-        """
-        Initialisation du processus BCA pour l'évaluation des projets de restauration corallienne.
-        """
         self.config = load_config(config_path)
         self.data_loader = DataLoader(self.config["data_path"])
         self.data_preprocessor = DataPreprocessor()
@@ -23,9 +20,6 @@ class CoralRestorationBCA:
         self.evaluator = Evaluator()
 
     def run(self):
-        """
-        Run the Benefit-Cost Analysis (BCA) process.
-        """
         # Load and process data
         data = self.data_loader.load_data()
         processed_data = self.data_preprocessor.preprocess_data(data)
@@ -35,7 +29,9 @@ class CoralRestorationBCA:
         benefits = self.benefit_model.calculate_benefits(processed_data, self.config)
 
         # Compute BCA
-        bca_results = self.bca_calculator.calculate_bca(costs, benefits)
+        bca_results = self.bca_calculator.calculate_bca(
+            costs, benefits, self.config["discount_rate"], self.config["years"]
+        )
 
         # Evaluate the model
         evaluation_results = self.evaluator.evaluate_model(bca_results)
