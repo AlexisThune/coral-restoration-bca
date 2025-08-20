@@ -14,7 +14,9 @@ from src.data_loading_and_processing.spatial_grid import SpatialGrid
 from src.utils.technical_functions import ensure_increasing, place_points_on_grid
 from src.utils.ui import RestorationProject
 
-cloud_mode = os.environ.get("STREAMLIT_SERVER_PORT") is not None
+cloud_mode = os.environ.get("STREAMLIT_APP_ID") is not None
+st.write("Cloud mode is active:", cloud_mode)
+st.write(os.environ.keys())
 
 
 @dataclass
