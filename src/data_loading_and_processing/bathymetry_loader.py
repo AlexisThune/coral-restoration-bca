@@ -15,8 +15,8 @@ from src.utils.technical_functions import ensure_increasing, place_points_on_gri
 from src.utils.ui import RestorationProject
 
 cloud_mode = os.environ.get("STREAMLIT_APP_ID") is not None
-st.write("Cloud mode is active:", cloud_mode)
-st.write(os.environ.keys())
+print("Cloud mode is active:", cloud_mode)
+print(os.environ.keys())
 
 
 @dataclass
