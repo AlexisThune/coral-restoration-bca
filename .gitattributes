@@ -1,4 +1,2 @@
-data/bathymetry/raw/ filter=lfs diff=lfs merge=lfs -text
-data/coral/ filter=lfs diff=lfs merge=lfs -text
 data/bathymetry/raw/*.nc filter=lfs diff=lfs merge=lfs -text
 data/coral/*.geojson filter=lfs diff=lfs merge=lfs -text
