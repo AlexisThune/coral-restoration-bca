@@ -575,6 +575,8 @@ if st.session_state.restored_coral_zones_set:
     file_path = os.path.join(
         output_dir, "before_restoration", "input", "friction_before_restoration.geojson"
     )
+    os.makedirs(os.path.dirname(file_path), exist_ok=True)
+
     with open(file_path, "w") as f:
         json.dump(
             st.session_state.friction_before_restoration[
@@ -587,6 +589,8 @@ if st.session_state.restored_coral_zones_set:
     file_path = os.path.join(
         output_dir, "after_restoration", "input", "friction_before_restoration.geojson"
     )
+    os.makedirs(os.path.dirname(file_path), exist_ok=True)
+
     with open(file_path, "w") as f:
         json.dump(
             st.session_state.friction_before_restoration[
@@ -599,12 +603,16 @@ if st.session_state.restored_coral_zones_set:
     file_path = os.path.join(
         output_dir, "after_restoration", "input", "friction_from_restoration.geojson"
     )
+    os.makedirs(os.path.dirname(file_path), exist_ok=True)
+
     with open(file_path, "w") as f:
         json.dump(st.session_state.friction_from_restoration, f, indent=2)
 
     file_path = os.path.join(
         output_dir, "after_restoration", "input", "height_from_restoration.geojson"
     )
+    os.makedirs(os.path.dirname(file_path), exist_ok=True)
+
     with open(file_path, "w") as f:
         json.dump(st.session_state.height_from_restoration, f, indent=2)
 
