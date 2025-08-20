@@ -172,3 +172,23 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# Ignorer les données inutiles
+data/copernicus/
+data/example/
+
+# Ignorer les notebooks tiers
+CoastalHydrodynamics-main/
+
+# Ignorer mes notebooks
+notebooks/
+
+# Ignorer mes tests
+tests/
+
+# Ignorer SWAN
+src/models/benefits/swan_module
+
+# Ignorer les fichiers d'input et d'output XBeach
+src/models/benefits/xbeach_module/after_restoration/
+src/models/benefits/xbeach_module/before_restoration/

@@ -1,0 +1,26 @@
+{
+    "data_path": {
+        "main_path": "data/"
+    },
+    "module_path": {
+        "bathymetry_input_path": "data/bathymetry/raw/society_islands_3_isl_2016.nc",
+        "bathymetry_output_path": "data/bathymetry/projected/",
+        "xbeach_paths": [
+            "src/models/benefits/xbeach_module/before_restoration/input/",
+            "src/models/benefits/xbeach_module/after_restoration/input/"
+        ]
+    },
+    "Coral cover to friction coefficient (% to dimensionless)": {
+        "0": 0.01,
+        "10": 0.07,
+        "20": 0.08,
+        "30": 0.09,
+        "40": 0.10,
+        "50": 0.10,
+        "60": 0.11,
+        "70": 0.12,
+        "80": 0.13,
+        "90": 0.14,
+        "100": 0.15
+    }
+}
