@@ -1,5 +1,6 @@
 import subprocess
 from dataclasses import dataclass
+from pathlib import Path
 
 import streamlit as st
 
@@ -43,7 +44,14 @@ class CoralRestorationBCA:
             else:
                 input_path = self.config["module_path"]["xbeach_paths"][0]
 
-            xbeach_exe = r"C:\\Users\\alexi\\Documents\\Mines_Paris\\Cesure\\Polynesie\\coral-restoration-bca\\src\\models\\benefits\\xbeach_module\\XBeach\\xbeach.exe"
+            xbeach_exe = (
+                Path(__file__).parent
+                / "benefits"
+                / "xbeach_module"
+                / "XBeach"
+                / "xbeach.exe"
+            )
+
             try:
                 subprocess.run([xbeach_exe], cwd=input_path, capture_output=True)
             except FileNotFoundError:
