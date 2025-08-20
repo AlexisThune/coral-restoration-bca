@@ -2,6 +2,7 @@ import json
 import math
 import os
 import sys
+from pathlib import Path
 
 import folium
 import geopandas as gpd
@@ -137,7 +138,9 @@ folium.Rectangle(
 
 ########## Initialize GeoJSONs with loading spinner ##########
 if "original_coral_geojson_loaded" not in st.session_state:
-    data_path = os.path.join("data", "coral", "original_benthic_map.geojson")
+    data_path = (
+        Path(__file__).parent.parent / "data" / "coral" / "original_benthic_map.geojson"
+    )
     gdf_coral = load_benthic_map(data_path, st.session_state.epsg)
     st.session_state.original_coral_geojson = gdf_coral
 
@@ -566,7 +569,7 @@ if st.session_state.restored_coral_zones_set:
             st.session_state.height_from_restoration["features"].append(height_feature)
 
     # Save GeoJSONs
-    output_dir = "src/models/benefits/xbeach_module"
+    output_dir = Path(__file__).parent.parent / "src/models/benefits/xbeach_module"
 
     st.session_state.friction_before_restoration["friction"] = config[
         "Coral cover to friction coefficient (% to dimensionless)"
