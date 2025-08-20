@@ -1,13 +1,13 @@
 contextily==1.6.2
 folium==0.19.6
 geopandas==1.0.1
-matplotlib==3.10.5
-numpy==2.3.2
+matplotlib==3.10.0
+numpy==1.26.4
 pyproj==3.7.1
 rasterio==1.4.3
-scipy==1.16.1
+scipy==1.11.4
 Shapely==2.1.1
-skimage==0.0
+scikit-image==0.25.2
 streamlit==1.45.0
 streamlit_folium==0.25.0
 tqdm==4.67.1
