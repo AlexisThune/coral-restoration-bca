@@ -1,3 +1,4 @@
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -13,6 +14,8 @@ from src.data_loading_and_processing.spatial_grid import SpatialGrid
 from src.utils.technical_functions import ensure_increasing, place_points_on_grid
 from src.utils.ui import RestorationProject
 
+cloud_mode = os.environ.get("STREAMLIT_SERVER_PORT") is not None
+
 
 @dataclass
 class BathymetryDataLoader:
@@ -20,23 +23,33 @@ class BathymetryDataLoader:
     project: RestorationProject
 
     def __post_init__(self):
-        self.clear_data()
         self.grids = {}
+        self.cloud_mode = cloud_mode
+        self.module_input_path = Path(
+            self.config["module_path"]["bathymetry_input_path"]
+        )
+        self.module_output_path = Path(
+            self.config["module_path"]["bathymetry_output_path"]
+        )
+
+        if cloud_mode:
+            self.module_input_path = Path("/tmp/bathymetry_input")
+            self.module_output_path = Path("/tmp/bathymetry_output")
+
+        self.clear_data()
 
     def clear_data(self):
         """
         Clear the bathymetry output folder.
         """
-        self.output_path = Path(self.config["module_path"]["bathymetry_output_path"])
-        for file in self.output_path.glob("*.nc"):
+        for file in self.module_output_path.glob("*.nc"):
             file.unlink()
 
     def load_bathy_data(self):
         # Load the main bathymetry data
-        data_path = self.config["module_path"]["bathymetry_input_path"]
         lat_min, lat_max, lon_min, lon_max = self.project.marine_aoi_bounds
 
-        with xr.open_dataset(data_path) as ds:
+        with xr.open_dataset(self.module_input_path) as ds:
             bathy = ds["Band1"]
             bathy = bathy.rio.write_crs(ds["crs"].attrs["spatial_ref"])
 
@@ -151,7 +164,7 @@ class BathymetryDataLoader:
 
     def _save_bathy(self, data, filename):
         """Sauvegarde une bathymétrie NetCDF et la ferme proprement."""
-        path = Path(self.config["module_path"]["bathymetry_output_path"]) / filename
+        path = self.module_output_path / filename
         data.to_netcdf(path)
         data.close()
 
