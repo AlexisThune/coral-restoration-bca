@@ -39,9 +39,6 @@ class RestorationProject:
         # compute oriented_rect_coords area in ha
         self.oriented_rect_area = Polygon(self.oriented_rect_coords).area / 10_000
         print("GT area:", self.oriented_rect_area, "ha")
-        cloud_mode = os.environ.get("STREAMLIT_APP_ID") is not None
-        print("Cloud mode is active:", cloud_mode)
-        print(os.environ.keys())
 
     def _generate_aoi_bounds(self, degree_margin=0.5):
         return (

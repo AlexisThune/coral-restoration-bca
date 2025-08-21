@@ -1,4 +1,3 @@
-import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -14,10 +13,6 @@ from src.data_loading_and_processing.spatial_grid import SpatialGrid
 from src.utils.technical_functions import ensure_increasing, place_points_on_grid
 from src.utils.ui import RestorationProject
 
-cloud_mode = os.environ.get("STREAMLIT_APP_ID") is not None
-print("Cloud mode is active:", cloud_mode)
-print(os.environ.keys())
-
 
 @dataclass
 class BathymetryDataLoader:
@@ -26,26 +21,9 @@ class BathymetryDataLoader:
 
     def __post_init__(self):
         self.grids = {}
-        self.cloud_mode = cloud_mode
         self.module_input_path = Path(
             self.config["module_path"]["bathymetry_input_path"]
         )
-        self.module_output_path = Path(
-            self.config["module_path"]["bathymetry_output_path"]
-        )
-
-        if cloud_mode:
-            self.module_input_path = Path("/tmp/bathymetry_input")
-            self.module_output_path = Path("/tmp/bathymetry_output")
-
-        self.clear_data()
-
-    def clear_data(self):
-        """
-        Clear the bathymetry output folder.
-        """
-        for file in self.module_output_path.glob("*.nc"):
-            file.unlink()
 
     def load_bathy_data(self):
         # Load the main bathymetry data
@@ -118,8 +96,6 @@ class BathymetryDataLoader:
             ny=len(grid["y"].values),
         )
 
-        self._save_bathy(grid, "xbeach_grid.nc")
-
         # Conversion du DataArray en numpy
         mask = ~np.isnan(grid.values)
         shapes_gen = shapes(grid.values, mask=mask, transform=grid.rio.transform())
@@ -158,17 +134,11 @@ class BathymetryDataLoader:
             )
 
         # Ajouter la colonne dans gdf projet
-        self.project.gdf_grid["bathy_interp"] = bathy_interp
+        self.project.gdf_grid.loc[:, "bathy_interp"] = bathy_interp
 
         # Save as an array
         nrows, ncols = self.project.y_grid.shape  # shape 2D
         self.project.z_grid = bathy_interp.reshape((nrows, ncols))
-
-    def _save_bathy(self, data, filename):
-        """Sauvegarde une bathymétrie NetCDF et la ferme proprement."""
-        path = self.module_output_path / filename
-        data.to_netcdf(path)
-        data.close()
 
     def load(self):
         with st.spinner("Loading bathymetry data..."):
