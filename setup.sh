@@ -18,7 +18,7 @@ if [ ! -d "$XB_SRC" ]; then
     git clone https://github.com/openearth/xbeach.git "$XB_SRC"
 fi
 
-cd "$XB_SRC/src"
+cd "$XB_SRC"
 make config=gnuplot netcdf=1 mpi=1
 
 echo "✅ XBeach compilé avec succès dans $XB_BIN"
