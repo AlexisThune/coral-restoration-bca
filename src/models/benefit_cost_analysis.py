@@ -39,7 +39,7 @@ class CoralRestorationBCA:
 
     def run(self):
 
-        def run_xbeach(self, after_restoration: bool):
+        def run_xbeach(after_restoration: bool):
             """Runs the XBeach simulation using the compiled or bundled executable."""
 
             # Déterminer le dossier d'entrée selon le scénario
