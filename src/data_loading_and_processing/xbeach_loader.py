@@ -175,7 +175,7 @@ class XBeachDataLoader:
     def configure_params(self, xb_setup):
         xb_setup.set_params(
             {
-                "Wavemodel": "surfbeat",
+                "wavemodel": "surfbeat",
                 "morphology": 0,
                 "bedfriction": "manning",
                 "bedfricfile": "friction.dep",

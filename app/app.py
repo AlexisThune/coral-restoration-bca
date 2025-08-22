@@ -133,7 +133,7 @@ else:
 os.environ["XB_BIN_DIR"] = str(persistent_dir)
 
 # Binaire attendu
-xbeach_binary = persistent_dir / "xbeach" / "src" / "xbeach"
+xbeach_binary = persistent_dir / "xbeach"
 
 if not xbeach_binary.exists():
     print("Compilation nécessaire...")
@@ -196,7 +196,7 @@ if st.session_state.get("project_area_set"):
 
     ### Filter the coral cover GeoDataFrame to the project area
     project_area = Polygon(st.session_state.project_area)
-    gdf_coral_filtered = gdf_coral[gdf_coral.intersects(project_area)]
+    gdf_coral_filtered = gdf_coral[gdf_coral.intersects(project_area)].copy()
 
     draw_zones(
         gdf_coral_filtered["geometry"],
