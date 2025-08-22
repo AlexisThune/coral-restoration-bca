@@ -1,3 +1,5 @@
+import os
+import platform
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -36,28 +38,54 @@ class CoralRestorationBCA:
         self.xbeach_data_loader.load(after_restoration=True)
 
     def run(self):
-        # Run the XBeach simulation twice
-        def run_xbeach(after_restoration: bool):
-            """Runs the XBeach simulation using the provided simulation path."""
+
+        def run_xbeach(self, after_restoration: bool):
+            """Runs the XBeach simulation using the compiled or bundled executable."""
+
+            # Déterminer le dossier d'entrée selon le scénario
             if after_restoration:
                 input_path = self.config["module_path"]["xbeach_paths"][1]
             else:
                 input_path = self.config["module_path"]["xbeach_paths"][0]
 
-            xbeach_exe = (
-                Path(__file__).parent
-                / "benefits"
-                / "xbeach_module"
-                / "XBeach"
-                / "xbeach.exe"
+            # 1. Vérifier si on est sous Streamlit Cloud (Linux)
+            if not platform.processor():
+                # binaire compilé dans le dossier persistant
+                persistent_dir = Path("/mnt/data/xbeach_bin")
+                xbeach_exe = persistent_dir / "xbeach" / "src" / "xbeach"
+            else:
+                # Local : soit compilé dans ~/.xbeach_bin, soit un exe fourni
+                persistent_dir = Path.home() / ".xbeach_bin"
+                xbeach_exe = persistent_dir / "xbeach" / "src" / "xbeach"
+
+                # fallback Windows : exe fourni avec le projet
+                if os.name == "nt" and not xbeach_exe.exists():
+                    xbeach_exe = (
+                        Path(__file__).parent
+                        / "benefits"
+                        / "xbeach_module"
+                        / "XBeach"
+                        / "xbeach.exe"
+                    )
+
+            # Vérifier si le binaire existe
+            if not xbeach_exe.exists():
+                raise FileNotFoundError(
+                    f"❌ Impossible de trouver XBeach à {xbeach_exe}.\n"
+                    "Assurez-vous de l'avoir compilé (Cloud/Linux) ou fourni (Windows)."
+                )
+
+            # Exécution
+            result = subprocess.run(
+                [str(xbeach_exe)], cwd=input_path, capture_output=True, text=True
             )
 
-            try:
-                subprocess.run([xbeach_exe], cwd=input_path, capture_output=True)
-            except FileNotFoundError:
-                print(
-                    "Error : xbeach.exe not in PATH, or incorrect file path furnished."
+            if result.returncode != 0:
+                raise RuntimeError(
+                    f"XBeach a échoué (code {result.returncode}) :\n{result.stderr}"
                 )
+
+            return result.stdout
 
         st.write("Running XBeach simulation...")
         print("Running XBeach simulation...")

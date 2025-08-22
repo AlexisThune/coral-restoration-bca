@@ -1,6 +1,8 @@
 import json
 import math
 import os
+import platform
+import subprocess
 import sys
 from pathlib import Path
 
@@ -118,6 +120,28 @@ st.set_page_config(page_title="BCA Model for coral restoration projects", layout
 st.title("BCA Model for coral restoration projects")
 init_session_state(SESSION_DEFAULTS)
 config = load_config(config_path="src/config.json")
+
+########## XBeach installation for Linux Streamlit cloud environment ##########
+
+# Déterminer dossier persistant
+if not platform.processor():
+    print("Likely running on Streamlit Cloud")
+    persistent_dir = Path("/mnt/data/xbeach_bin")
+else:
+    print("Running locally")
+    persistent_dir = Path.home() / ".xbeach_bin"
+
+os.environ["XB_BIN_DIR"] = str(persistent_dir)
+
+# Binaire attendu
+xbeach_binary = persistent_dir / "xbeach" / "src" / "xbeach"
+
+if not xbeach_binary.exists():
+    print("Compilation nécessaire...")
+    subprocess.run(["bash", "setup.sh"], check=True)
+else:
+    print(f"✅ XBeach déjà prêt : {xbeach_binary}")
+
 
 ########## Map initialisation ##########
 imap = InteractiveMap(

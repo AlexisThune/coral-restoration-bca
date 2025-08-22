@@ -134,7 +134,7 @@ class BathymetryDataLoader:
             )
 
         # Ajouter la colonne dans gdf projet
-        self.project.gdf_grid.loc[:, "bathy_interp"] = bathy_interp
+        self.project.gdf_grid = self.project.gdf_grid.assign(bathy_interp=bathy_interp)
 
         # Save as an array
         nrows, ncols = self.project.y_grid.shape  # shape 2D

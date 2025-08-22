@@ -1,0 +1,5 @@
+build-essential
+gfortran
+mpich
+libnetcdf-dev
+libnetcdff-dev
