@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-: "${XB_BIN_DIR:=$HOME/.xbeach_bin}"
+: "${XB_BIN_DIR:=$HOME/xbeach_bin}"
 mkdir -p "$XB_BIN_DIR"
 
 XB_SRC="$XB_BIN_DIR/xbeach"
@@ -18,7 +18,6 @@ if [ ! -d "$XB_SRC" ]; then
     git clone https://github.com/openearth/xbeach.git "$XB_SRC"
 fi
 
-# Aller dans le dossier source qui contient le Makefile
 cd "$XB_SRC/src"
 make config=gnuplot netcdf=1 mpi=1
 
