@@ -53,13 +53,9 @@ class CoralRestorationBCA:
                 # binaire compilé dans le dossier persistant
                 persistent_dir = Path.home() / "xbeach_bin"
                 xbeach_exe = persistent_dir / "xbeach"
-            else:
-                # Local : soit compilé dans ~/.xbeach_bin, soit un exe fourni
-                persistent_dir = Path.home() / ".xbeach_bin"
-                xbeach_exe = persistent_dir / "xbeach"
 
                 # fallback Windows : exe fourni avec le projet
-                if os.name == "nt" and not xbeach_exe.exists():
+                if os.name == "nt":
                     xbeach_exe = (
                         Path(__file__).parent
                         / "benefits"

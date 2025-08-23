@@ -18,6 +18,8 @@ if [ ! -d "$XB_BIN" ]; then
 fi
 
 cd "$XB_BIN"
-make config=gnuplot netcdf=1 mpi=1
+autoreconf --install
+./configure
+make
 
 echo "✅ XBeach compilé avec succès dans $XB_BIN"

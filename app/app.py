@@ -123,21 +123,16 @@ config = load_config(config_path="src/config.json")
 
 ########## XBeach installation for Linux Streamlit cloud environment ##########
 
-# Déterminer dossier persistant
 if not platform.processor():
     persistent_dir = Path.home() / "xbeach_bin"
 
-else:
-    persistent_dir = Path.home() / ".xbeach_bin"
+    os.environ["XB_BIN_DIR"] = str(persistent_dir)
 
-os.environ["XB_BIN_DIR"] = str(persistent_dir)
+    xbeach_binary = persistent_dir / "xbeach"
 
-# Binaire attendu
-xbeach_binary = persistent_dir / "xbeach"
-
-if not xbeach_binary.exists():
-    print("Compilation nécessaire...")
-    subprocess.run(["bash", "setup.sh"], check=True)
+    if not xbeach_binary.exists():
+        print("Compilation nécessaire...")
+        subprocess.run(["bash", "setup.sh"], check=True)
 
 
 ########## Map initialisation ##########
