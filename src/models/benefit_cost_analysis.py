@@ -54,6 +54,8 @@ class CoralRestorationBCA:
                 persistent_dir = Path.home() / "xbeach_bin"
                 xbeach_exe = persistent_dir / "xbeach"
 
+            # 2. If not that means we are running the program in local
+            else:
                 # fallback Windows : exe fourni avec le projet
                 if os.name == "nt":
                     xbeach_exe = (

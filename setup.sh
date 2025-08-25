@@ -1,30 +1,22 @@
 #!/bin/bash
 set -e
 
-# Répertoire d'installation de XBeach
-: "${XB_PREFIX:=$HOME/xbeach_install}"
-mkdir -p "$XB_PREFIX"
+# Répertoires source et installation
+: "${XB_SRC_DIR:=$HOME/xbeach_src}"
+: "${XB_BIN_DIR:=$HOME/xbeach_bin}"
 
-# Vérifie si déjà compilé
-if [ -x "$XB_PREFIX/bin/xbeach" ]; then
-    echo "✅ XBeach déjà compilé : $XB_PREFIX/bin/xbeach"
+# Vérifie si déjà compilé et installé
+if [ -x "$XB_BIN_DIR/bin/xbeach" ]; then
+    echo "✅ XBeach déjà compilé : $XB_BIN_DIR/bin/xbeach"
     exit 0
 fi
 
-echo "📦 Installation des dépendances système..."
-sudo apt-get update
-sudo apt-get install -y autoconf automake libtool gfortran \
-    libnetcdf-dev libnetcdff-dev libopenmpi-dev openmpi-bin build-essential
-
-echo "📦 Installation des dépendances Python..."
-pip install mako
-
 # Clonage du repo si pas encore fait
-if [ ! -d "$HOME/xbeach_src" ]; then
-    git clone https://github.com/openearth/xbeach.git "$HOME/xbeach_src"
+if [ ! -d "$XB_SRC_DIR" ]; then
+    git clone https://github.com/openearth/xbeach.git "$XB_SRC_DIR"
 fi
 
-cd "$HOME/xbeach_src"
+cd "$XB_SRC_DIR"
 
 # Nettoyage si compilation précédente
 make distclean || true
@@ -35,10 +27,10 @@ make distclean || true
 # Configuration avec flags d'optimisation
 FCFLAGS="-mtune=corei7-avx -funroll-loops --param max-unroll-times=4 \
 -ffree-line-length-none -O3 -ffast-math" \
-./configure --with-netcdf --with-mpi --prefix="$XB_PREFIX"
+./configure --with-netcdf --with-mpi --prefix="$XB_BIN_DIR"
 
 # Compilation et installation
 make -j"$(nproc)"
 make install
 
-echo "✅ XBeach compilé et installé dans $XB_PREFIX"
+echo "✅ XBeach compilé et installé dans $XB_BIN_DIR/bin/xbeach"
