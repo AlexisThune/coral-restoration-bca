@@ -47,8 +47,8 @@ class CoralRestorationBCA:
         for fname in os.listdir(xbeach_dir):
             fpath = os.path.join(xbeach_dir, fname)
             if os.path.isfile(fpath):
-                st = os.stat(fpath)
-                os.chmod(fpath, st.st_mode | stat.S_IXUSR)
+                file_stat = os.stat(fpath)
+                os.chmod(fpath, file_stat.st_mode | stat.S_IXUSR)
 
         def run_xbeach(after_restoration: bool):
             """Runs the XBeach simulation using the compiled or bundled executable."""
@@ -101,19 +101,19 @@ class CoralRestorationBCA:
 
             return result.stdout
 
-        st.write("Running XBeach simulation...")
+        file_stat.write("Running XBeach simulation...")
         print("Running XBeach simulation...")
         run_xbeach(after_restoration=False)
         run_xbeach(after_restoration=True)
 
-        st.write("Analyzing XBeach results...")
+        file_stat.write("Analyzing XBeach results...")
         print("Analyzing XBeach results...")
         self.xbeach_results_analyzer.analyze(after_restoration=False)
         self.flooded_area_before = self.xbeach_results_analyzer.flooded_area
         self.xbeach_results_analyzer.analyze(after_restoration=True)
         self.flooded_area_after = self.xbeach_results_analyzer.flooded_area
 
-        st.write("Computing benefits...")
+        file_stat.write("Computing benefits...")
         self.compute_benefits()
 
     def compute_benefits(self):
