@@ -50,9 +50,14 @@ class CoralRestorationBCA:
 
             # 1. Vérifier si on est sous Streamlit Cloud (Linux)
             if not platform.processor():
-                # binaire compilé dans le dossier persistant
-                persistent_dir = Path.home() / "xbeach_bin"
-                xbeach_exe = persistent_dir / "xbeach"
+                # Binaire compilé fournir avec le projet
+                xbeach_exe = (
+                    Path(__file__).parent
+                    / "benefits"
+                    / "xbeach_module"
+                    / "XBeach"
+                    / "xbeach"
+                )
 
             # 2. If not that means we are running the program in local
             else:
