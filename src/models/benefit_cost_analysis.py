@@ -12,6 +12,11 @@ from src.data_loading_and_processing.xbeach_loader import XBeachDataLoader
 from src.models.benefits.xbeach_module.xbeach_analyzer import XBeachResultsAnalyzer
 from src.utils.ui import RestorationProject, Scenario
 
+xbeach_dir = Path(__file__).parent / "benefits" / "xbeach_module" / "XBeach"
+os.environ["LD_LIBRARY_PATH"] = (
+    str(xbeach_dir) + ":" + os.environ.get("LD_LIBRARY_PATH", "")
+)
+
 
 @dataclass
 class CoralRestorationBCA:
@@ -39,10 +44,6 @@ class CoralRestorationBCA:
         self.xbeach_data_loader.load(after_restoration=True)
 
     def run(self):
-
-        # Répertoire contenant XBeach et les DLL
-        xbeach_dir = Path(__file__).parent / "benefits" / "xbeach_module" / "XBeach"
-
         # Donne les droits d'exécution à tous les fichiers du dossier
         for fname in os.listdir(xbeach_dir):
             fpath = os.path.join(xbeach_dir, fname)
