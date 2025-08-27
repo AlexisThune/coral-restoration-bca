@@ -1,5 +1,6 @@
 import os
 import platform
+import stat
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -38,6 +39,16 @@ class CoralRestorationBCA:
         self.xbeach_data_loader.load(after_restoration=True)
 
     def run(self):
+
+        # Répertoire contenant XBeach et les DLL
+        xbeach_dir = Path(__file__).parent / "benefits" / "xbeach_module" / "XBeach"
+
+        # Donne les droits d'exécution à tous les fichiers du dossier
+        for fname in os.listdir(xbeach_dir):
+            fpath = os.path.join(xbeach_dir, fname)
+            if os.path.isfile(fpath):
+                st = os.stat(fpath)
+                os.chmod(fpath, st.st_mode | stat.S_IXUSR)
 
         def run_xbeach(after_restoration: bool):
             """Runs the XBeach simulation using the compiled or bundled executable."""
