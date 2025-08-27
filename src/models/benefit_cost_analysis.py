@@ -101,19 +101,19 @@ class CoralRestorationBCA:
 
             return result.stdout
 
-        file_stat.write("Running XBeach simulation...")
+        st.write("Running XBeach simulation...")
         print("Running XBeach simulation...")
         run_xbeach(after_restoration=False)
         run_xbeach(after_restoration=True)
 
-        file_stat.write("Analyzing XBeach results...")
+        st.write("Analyzing XBeach results...")
         print("Analyzing XBeach results...")
         self.xbeach_results_analyzer.analyze(after_restoration=False)
         self.flooded_area_before = self.xbeach_results_analyzer.flooded_area
         self.xbeach_results_analyzer.analyze(after_restoration=True)
         self.flooded_area_after = self.xbeach_results_analyzer.flooded_area
 
-        file_stat.write("Computing benefits...")
+        st.write("Computing benefits...")
         self.compute_benefits()
 
     def compute_benefits(self):
