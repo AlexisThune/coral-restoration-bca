@@ -139,6 +139,18 @@ folium.Rectangle(
     popup="Bathymetry data limits",
 ).add_to(imap.map)
 
+########## Add data mentions ##########
+st.sidebar.header("Data sources")
+# Coral Allen Atlas
+st.sidebar.markdown(
+    "Allen Coral Atlas maps, bathymetry and map statistics are © 2018-2023 Allen Coral Atlas Partnership and Arizona State University and licensed CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/)"
+)
+# NGDC Bathymetry
+st.sidebar.markdown(
+    "NOAA National Geophysical Data Center. 2006. Society Islands, French Polynesia Digital Elevation Model – 3 arc-second. NOAA National Centers for Environmental Information. Accessed 1 September 2025. URL: https://www.ncei.noaa.gov/access/metadata/landing-page/bin/iso?id=gov.noaa.ngdc.mgg.dem:11511"
+)
+
+
 ########## Initialize GeoJSONs with loading spinner ##########
 if "original_coral_geojson_loaded" not in st.session_state:
     data_path = (
