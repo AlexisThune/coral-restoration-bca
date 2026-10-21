@@ -1,7 +1,6 @@
 import os
-import platform
-import stat
 import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -13,9 +12,49 @@ from src.models.benefits.xbeach_module.xbeach_analyzer import XBeachResultsAnaly
 from src.utils.ui import RestorationProject, Scenario
 
 xbeach_dir = Path(__file__).parent / "benefits" / "xbeach_module" / "XBeach"
-os.environ["LD_LIBRARY_PATH"] = (
-    str(xbeach_dir) + ":" + os.environ.get("LD_LIBRARY_PATH", "")
-)
+
+
+def resolve_xbeach_executable():
+    configured_executable = os.environ.get("XBEACH_EXECUTABLE")
+    if configured_executable:
+        executable = Path(configured_executable).expanduser().resolve()
+    elif os.name == "nt":
+        executable = xbeach_dir / "xbeach.exe"
+    elif sys.platform.startswith("linux"):
+        executable = Path("/opt/xbeach/src/xbeach/xbeach")
+    else:
+        raise OSError(f"Unsupported operating system for XBeach: {sys.platform}")
+
+    if not executable.is_file():
+        raise FileNotFoundError(
+            f"XBeach executable not found at {executable}. "
+            "Set XBEACH_EXECUTABLE to its path."
+        )
+
+    return executable
+
+
+def build_xbeach_environment(executable):
+    run_env = os.environ.copy()
+    library_dir = os.environ.get("XBEACH_LIBRARY_PATH")
+    if library_dir:
+        library_dir = Path(library_dir).expanduser().resolve()
+        if not library_dir.is_dir():
+            raise FileNotFoundError(
+                f"XBeach library directory not found: {library_dir}"
+            )
+    else:
+        library_dir = (
+            executable.parent.parent / "xbeachlibrary" / ".libs"
+        ).resolve()
+
+    if sys.platform.startswith("linux") and library_dir.is_dir():
+        existing_library_path = run_env.get("LD_LIBRARY_PATH", "")
+        run_env["LD_LIBRARY_PATH"] = os.pathsep.join(
+            path for path in (str(library_dir), existing_library_path) if path
+        )
+
+    return run_env
 
 
 @dataclass
@@ -44,13 +83,6 @@ class CoralRestorationBCA:
         self.xbeach_data_loader.load(after_restoration=True)
 
     def run(self):
-        # Donne les droits d'exécution à tous les fichiers du dossier
-        for fname in os.listdir(xbeach_dir):
-            fpath = os.path.join(xbeach_dir, fname)
-            if os.path.isfile(fpath):
-                file_stat = os.stat(fpath)
-                os.chmod(fpath, file_stat.st_mode | stat.S_IXUSR)
-
         def run_xbeach(after_restoration: bool):
             """Runs the XBeach simulation using the compiled or bundled executable."""
 
@@ -60,39 +92,16 @@ class CoralRestorationBCA:
             else:
                 input_path = self.config["module_path"]["xbeach_paths"][0]
 
-            # 1. Vérifier si on est sous Streamlit Cloud (Linux)
-            if not platform.processor():
-                # Binaire compilé fournir avec le projet
-                xbeach_exe = (
-                    Path(__file__).parent
-                    / "benefits"
-                    / "xbeach_module"
-                    / "XBeach"
-                    / "xbeach"
-                )
-
-            # 2. If not that means we are running the program in local
-            else:
-                # fallback Windows : exe fourni avec le projet
-                if os.name == "nt":
-                    xbeach_exe = (
-                        Path(__file__).parent
-                        / "benefits"
-                        / "xbeach_module"
-                        / "XBeach"
-                        / "xbeach.exe"
-                    )
-
-            # Vérifier si le binaire existe
-            if not xbeach_exe.exists():
-                raise FileNotFoundError(
-                    f"❌ Impossible de trouver XBeach à {xbeach_exe}.\n"
-                    "Assurez-vous de l'avoir compilé (Cloud/Linux) ou fourni (Windows)."
-                )
+            xbeach_exe = resolve_xbeach_executable()
+            run_env = build_xbeach_environment(xbeach_exe)
 
             # Exécution
             result = subprocess.run(
-                [str(xbeach_exe)], cwd=input_path, capture_output=True, text=True
+                [str(xbeach_exe)],
+                cwd=input_path,
+                capture_output=True,
+                text=True,
+                env=run_env,
             )
 
             if result.returncode != 0:

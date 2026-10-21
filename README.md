@@ -15,3 +15,16 @@ The command requires GDAL's `ogr2ogr` utility. The app reads only features
 within the selected project area's bounding box, then applies an exact
 intersection filter. The full-resolution source geometries are retained for
 the analysis.
+
+## XBeach executable
+
+In the Docker image, the app uses the XBeach executable built at
+`/opt/xbeach/src/xbeach/xbeach`. On Windows, it uses the bundled
+`xbeach.exe`. To select a different executable, set `XBEACH_EXECUTABLE` to its
+path. On Linux, if its shared libraries are not in the executable's expected
+build location, set `XBEACH_LIBRARY_PATH` to the directory containing them.
+
+XBeach requires a structured rectangular grid. The app therefore keeps the
+complete regular grid covering the project area's extent after rotation to the
+selected grid angle; for different area and grid angles, some edge cells can
+extend beyond the drawn area.

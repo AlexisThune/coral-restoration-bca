@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from math import ceil
 
 import folium
 import geopandas as gpd
@@ -60,18 +61,15 @@ class RestorationProject:
         rect_local = translate(rect_poly, xoff=-minx, yoff=-miny)
         rect_axis_aligned = rotate(rect_local, -self.grid_angle, origin=(0, 0))
 
-        nx_cells = 0  # nombre de colonnes (X)
-        ny_cells = 0  # nombre de lignes (Y)
+        gxmin, gymin, gxmax, gymax = rect_axis_aligned.bounds
+        nx_cells = max(1, ceil((gxmax - gxmin) / cell_size))
+        ny_cells = max(1, ceil((gymax - gymin) / cell_size))
 
         grid_polys_local = []
-        gxmin, gymin, gxmax, gymax = rect_axis_aligned.bounds
-        x = gxmin
-
-        while x < gxmax:
-            nx_cells += 1
-            y = gymin
-            col_count = 0
-            while y < gymax:
+        for i in range(nx_cells):
+            x = gxmin + i * cell_size
+            for j in range(ny_cells):
+                y = gymin + j * cell_size
                 cell = Polygon(
                     [
                         (x, y),
@@ -80,12 +78,7 @@ class RestorationProject:
                         (x, y + cell_size),
                     ]
                 )
-                if rect_axis_aligned.intersects(cell):
-                    grid_polys_local.append(cell)
-                    col_count += 1
-                y += cell_size
-            ny_cells = max(ny_cells, col_count)
-            x += cell_size
+                grid_polys_local.append(cell)
 
         grid_polys_global = [
             translate(
