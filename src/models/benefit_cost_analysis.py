@@ -135,6 +135,16 @@ class CoralRestorationBCA:
                     f"(exit code {process.returncode}):\n{output}"
                 )
 
+            output_file = Path(input_path) / "xboutput.nc"
+            if not output_file.is_file() or output_file.stat().st_size == 0:
+                output_tail = "\n".join(output.splitlines()[-40:])
+                raise RuntimeError(
+                    f"XBeach reported success for the {scenario_name}, but did "
+                    f"not create a non-empty NetCDF output file at {output_file}. "
+                    "Check the XBeach build's NetCDF support and outputformat "
+                    f"setting. Final solver output:\n{output_tail}"
+                )
+
         scenarios = {
             False: "baseline scenario",
             True: "restored scenario",

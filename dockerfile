@@ -5,7 +5,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y \
     gfortran-8 gcc-8 make wget git automake autoconf libtool \
     subversion python3 python3-pip libhdf5-dev libnetcdf-dev libopenmpi-dev openmpi-bin \
-    libgdal-dev gdal-bin \
+    libnetcdff-dev libgdal-dev gdal-bin \
     && ln -s /usr/bin/python3 /usr/bin/python \
     && rm -rf /var/lib/apt/lists/*
 
@@ -30,7 +30,10 @@ RUN sed -i 's/character(kind=c_char, len=\([^)]*\))/character(kind=c_char), dime
     && sed -i 's/dimension(20), dimension(maxrank)/dimension(20, maxrank)/' /opt/xbeach/src/xbeachlibrary/mnemoniciso.F90
 
 WORKDIR /opt/xbeach
-RUN ./autogen.sh && ./configure
+RUN ./autogen.sh && \
+    NETCDF_FORTRAN_CFLAGS="$(nf-config --fflags)" \
+    NETCDF_FORTRAN_LIBS="$(nf-config --flibs)" \
+    ./configure --with-netcdf
 RUN make clean && make
 RUN mkdir -p /opt/xbeach_output && cp /opt/xbeach/src/xbeach/xbeach /opt/xbeach_output/
 

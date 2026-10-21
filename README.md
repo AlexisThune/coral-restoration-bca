@@ -48,6 +48,13 @@ The bundled `xbTools` postprocessor uses a Windows path separator when opening
 `XBlog.txt`. The app's small adapter reads this metadata with `pathlib`, which
 works on both Linux and Windows.
 
+The result analyzer requires XBeach NetCDF output (`xboutput.nc`). The Docker
+build installs the NetCDF Fortran development library and configures XBeach
+with NetCDF support; generated model inputs explicitly request
+`outputformat=netcdf`. Before analysis, the app verifies that each scenario
+produced a non-empty `xboutput.nc` and reports the solver log tail if it did
+not.
+
 ## XBeach runtime and CPU use
 
 The baseline and restored scenarios use separate input/output directories, so

@@ -209,6 +209,7 @@ class XBeachDataLoader:
                 "morphology": 0,
                 "bedfriction": "manning",
                 "bedfricfile": "friction.dep",
+                "outputformat": "netcdf",
                 "rugdepth": 0.02,
                 "tstop": 3600,
                 "tstart": 100,
