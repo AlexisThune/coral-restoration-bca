@@ -1,24 +1,25 @@
 import json
 import math
 import os
-import platform
-import subprocess
 import sys
+import time
 from pathlib import Path
+
+import streamlit as st
+
+st.set_page_config(page_title="BCA Model for coral restoration projects", layout="wide")
+st.title("BCA Model for coral restoration projects")
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 import folium
 import geopandas as gpd
 import numpy as np
-import streamlit as st
-
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
 from shapely.geometry import Point, Polygon
 from streamlit_folium import st_folium
 
 from src.config import load_config
 from src.data_loading_and_processing.coral_loader import load_coral_for_project
-from src.models.benefit_cost_analysis import CoralRestorationBCA
 from src.utils.technical_functions import get_epsg, n_closest_points
 from src.utils.ui import InteractiveMap, RestorationProject, Scenario
 
@@ -111,8 +112,6 @@ def draw_zones_with_validation(
 
 
 ########## Page configuration ##########
-st.set_page_config(page_title="BCA Model for coral restoration projects", layout="wide")
-st.title("BCA Model for coral restoration projects")
 init_session_state(SESSION_DEFAULTS)
 config = load_config(config_path="src/config.json")
 
@@ -632,31 +631,46 @@ if st.session_state.restored_coral_zones_set:
 if st.session_state.coral_geojsons_saved:
     ########## Interactions ##########
     if st.sidebar.button("Launch simulation", key="launch_simulation"):
-        with st.spinner("Simulation running..."):
+        with st.status("Preparing simulation...", expanded=True) as simulation_status:
+            simulation_start_time = time.monotonic()
+
+            def report_simulation_progress(message):
+                elapsed = time.monotonic() - simulation_start_time
+                progress_message = f"+{elapsed:.0f}s — {message}"
+                print(f"[simulation] {progress_message}", flush=True)
+                simulation_status.write(progress_message)
+                simulation_status.update(label=message, state="running")
+
+            report_simulation_progress("Building the structured XBeach project grid")
+            project = RestorationProject(
+                start_year=2025,
+                duration=10,
+                location=(
+                    st.session_state.project_lat,
+                    st.session_state.project_lon,
+                ),
+                oriented_rect_coords=st.session_state.project_area,
+                grid_angle=st.session_state.grid_angle,
+                epsg=st.session_state.epsg,
+                height=1,
+                Hm0=st.session_state.wave_conditions["Hm0"],
+                Tp=st.session_state.wave_conditions["Tp"],
+                zs0=st.session_state.wave_conditions["zs0"],
+                mainang=st.session_state.wave_conditions["mainang"],
+                area_value=st.session_state.area_value,
+            )
+            report_simulation_progress("Loading simulation and XBeach modules")
+            from src.models.benefit_cost_analysis import CoralRestorationBCA
+
             simulation = CoralRestorationBCA(
                 config=config,
                 scenario=Scenario(discount_rate=0.1),
-                restoration_project=RestorationProject(
-                    start_year=2025,
-                    duration=10,
-                    location=(
-                        st.session_state.project_lat,
-                        st.session_state.project_lon,
-                    ),
-                    oriented_rect_coords=st.session_state.project_area,
-                    grid_angle=st.session_state.grid_angle,
-                    epsg=st.session_state.epsg,
-                    height=1,
-                    Hm0=st.session_state.wave_conditions["Hm0"],
-                    Tp=st.session_state.wave_conditions["Tp"],
-                    zs0=st.session_state.wave_conditions["zs0"],
-                    mainang=st.session_state.wave_conditions["mainang"],
-                    area_value=st.session_state.area_value,
-                ),
+                restoration_project=project,
             )
-            simulation.load_data()
-            simulation.run()
+            simulation.load_data(progress_callback=report_simulation_progress)
+            simulation.run(progress_callback=report_simulation_progress)
 
+            report_simulation_progress("Simulation workflow completed")
         st.session_state.simulation_completed = True
         st.balloons()
 if st.session_state.simulation_completed:

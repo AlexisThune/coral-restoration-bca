@@ -1,8 +1,10 @@
 import os
 import subprocess
 import sys
+import time
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Callable, Optional
 
 import streamlit as st
 
@@ -12,6 +14,7 @@ from src.models.benefits.xbeach_module.xbeach_analyzer import XBeachResultsAnaly
 from src.utils.ui import RestorationProject, Scenario
 
 xbeach_dir = Path(__file__).parent / "benefits" / "xbeach_module" / "XBeach"
+XBEACH_PROGRESS_INTERVAL_SECONDS = 30
 
 
 def resolve_xbeach_executable():
@@ -77,53 +80,90 @@ class CoralRestorationBCA:
             self.config, self.restoration_project
         )
 
-    def load_data(self):
+    @staticmethod
+    def _report_progress(
+        progress_callback: Optional[Callable[[str], None]], message: str
+    ) -> None:
+        if progress_callback is None:
+            print(f"[simulation] {message}", flush=True)
+        else:
+            progress_callback(message)
+
+    def load_data(
+        self, progress_callback: Optional[Callable[[str], None]] = None
+    ) -> None:
+        self._report_progress(progress_callback, "Loading and interpolating bathymetry")
         self.bathymetry_data_loader.load()
+
+        self._report_progress(
+            progress_callback, "Preparing baseline XBeach input files"
+        )
         self.xbeach_data_loader.load(after_restoration=False)
+
+        self._report_progress(
+            progress_callback, "Preparing restored-scenario XBeach input files"
+        )
         self.xbeach_data_loader.load(after_restoration=True)
+        self._report_progress(progress_callback, "Simulation inputs are ready")
 
-    def run(self):
+    def run(self, progress_callback: Optional[Callable[[str], None]] = None) -> None:
         def run_xbeach(after_restoration: bool):
-            """Runs the XBeach simulation using the compiled or bundled executable."""
-
-            # Déterminer le dossier d'entrée selon le scénario
             if after_restoration:
                 input_path = self.config["module_path"]["xbeach_paths"][1]
+                scenario_name = "restored scenario"
             else:
                 input_path = self.config["module_path"]["xbeach_paths"][0]
+                scenario_name = "baseline scenario"
 
             xbeach_exe = resolve_xbeach_executable()
             run_env = build_xbeach_environment(xbeach_exe)
 
-            # Exécution
-            result = subprocess.run(
+            self._report_progress(
+                progress_callback,
+                f"Running XBeach for the {scenario_name}; the solver may take a while",
+            )
+            started_at = time.monotonic()
+            with subprocess.Popen(
                 [str(xbeach_exe)],
                 cwd=input_path,
-                capture_output=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
                 text=True,
                 env=run_env,
-            )
+            ) as process:
+                while True:
+                    try:
+                        output, _ = process.communicate(
+                            timeout=XBEACH_PROGRESS_INTERVAL_SECONDS
+                        )
+                        break
+                    except subprocess.TimeoutExpired:
+                        elapsed = time.monotonic() - started_at
+                        self._report_progress(
+                            progress_callback,
+                            f"XBeach is still running for the {scenario_name} "
+                            f"({elapsed:.0f}s elapsed)",
+                        )
 
-            if result.returncode != 0:
+            if process.returncode != 0:
                 raise RuntimeError(
-                    f"XBeach a échoué (code {result.returncode}) :\n{result.stderr}"
+                    f"XBeach failed for the {scenario_name} "
+                    f"(exit code {process.returncode}):\n{output}"
                 )
 
-            return result.stdout
-
-        st.write("Running XBeach simulation...")
-        print("Running XBeach simulation...")
         run_xbeach(after_restoration=False)
+        self._report_progress(progress_callback, "Baseline XBeach simulation finished")
         run_xbeach(after_restoration=True)
 
-        st.write("Analyzing XBeach results...")
-        print("Analyzing XBeach results...")
+        self._report_progress(progress_callback, "Analyzing baseline XBeach results")
         self.xbeach_results_analyzer.analyze(after_restoration=False)
         self.flooded_area_before = self.xbeach_results_analyzer.flooded_area
+
+        self._report_progress(progress_callback, "Analyzing restored-scenario results")
         self.xbeach_results_analyzer.analyze(after_restoration=True)
         self.flooded_area_after = self.xbeach_results_analyzer.flooded_area
 
-        st.write("Computing benefits...")
+        self._report_progress(progress_callback, "Computing project benefits")
         self.compute_benefits()
 
     def compute_benefits(self):
