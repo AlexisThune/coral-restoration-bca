@@ -17,6 +17,7 @@ from shapely.geometry import Point, Polygon
 from streamlit_folium import st_folium
 
 from src.config import load_config
+from src.data_loading_and_processing.coral_loader import load_coral_for_project
 from src.models.benefit_cost_analysis import CoralRestorationBCA
 from src.utils.technical_functions import get_epsg, n_closest_points
 from src.utils.ui import InteractiveMap, RestorationProject, Scenario
@@ -76,15 +77,9 @@ def initialize_geojson(name, epsg):
     }
 
 
-@st.cache_data(show_spinner="🔍 Loading coral benthic map...")
-def load_benthic_map(data_path, epsg_code):
-    with open(data_path) as f:
-        data = json.load(f)
-        gdf = gpd.GeoDataFrame.from_features(data["features"])
-        gdf.crs = "EPSG:4326"
-        gdf_proj = gdf.to_crs(f"EPSG:{epsg_code}")
-        gdf_coral = gdf_proj[gdf_proj["class"] == "Coral/Algae"]
-        return gdf_coral
+@st.cache_data(show_spinner="🔍 Loading coral features in project area...")
+def load_project_coral(data_path, project_area_coords, epsg_code):
+    return load_coral_for_project(data_path, project_area_coords, epsg_code)
 
 
 def draw_zones(zones, color, tooltip_prefix, source_epsg):
@@ -151,19 +146,6 @@ st.sidebar.markdown(
 )
 
 
-########## Initialize GeoJSONs with loading spinner ##########
-if "original_coral_geojson_loaded" not in st.session_state:
-    data_path = (
-        Path(__file__).parent.parent / "data" / "coral" / "original_benthic_map.geojson"
-    )
-    gdf_coral = load_benthic_map(data_path, st.session_state.epsg)
-    st.session_state.original_coral_geojson = gdf_coral
-
-    st.session_state.original_coral_geojson_loaded = True
-    st.rerun()  # Sort du spinner proprement
-else:
-    gdf_coral = st.session_state.original_coral_geojson
-
 ########## Add drawings to Map & GeoJSONs ##########
 if st.session_state.get("location_set"):
     folium.Marker(
@@ -188,9 +170,17 @@ if st.session_state.get("project_area_set"):
         tooltip="Project area",
     ).add_to(imap.map)
 
-    ### Filter the coral cover GeoDataFrame to the project area
-    project_area = Polygon(st.session_state.project_area)
-    gdf_coral_filtered = gdf_coral[gdf_coral.intersects(project_area)].copy()
+    data_path = (
+        Path(__file__).parent.parent
+        / "data"
+        / "coral"
+        / "original_benthic_coral.gpkg"
+    )
+    gdf_coral_filtered = load_project_coral(
+        str(data_path),
+        tuple(map(tuple, st.session_state.project_area)),
+        st.session_state.epsg,
+    )
 
     draw_zones(
         gdf_coral_filtered["geometry"],
