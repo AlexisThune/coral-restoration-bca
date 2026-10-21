@@ -4,8 +4,9 @@ from dataclasses import dataclass
 
 import geopandas as gpd
 import numpy as np
-from shapely.geometry import Point, Polygon
-from tqdm import tqdm
+from affine import Affine
+from rasterio.features import rasterize
+from shapely.geometry import Polygon
 from xbTools.xbeachtools import XBeachModelSetup
 
 from src.utils.ui import RestorationProject
@@ -28,6 +29,54 @@ class XBeachDataLoader:
         with open(path, "w") as f:
             for row in friction_grid:
                 f.write(" ".join(f"{val:.4f}" for val in row) + "\n")
+
+    def rasterize_polygon_values(self, geometries, values, fill_value):
+        x = self.project.x_grid
+        y = self.project.y_grid
+        angle = np.deg2rad(self.project.grid_angle)
+
+        column_x = (
+            x[0, 1] - x[0, 0]
+            if x.shape[1] > 1
+            else 10 * np.cos(angle)
+        )
+        column_y = (
+            y[0, 1] - y[0, 0]
+            if y.shape[1] > 1
+            else 10 * np.sin(angle)
+        )
+        row_x = (
+            x[1, 0] - x[0, 0]
+            if x.shape[0] > 1
+            else -10 * np.sin(angle)
+        )
+        row_y = (
+            y[1, 0] - y[0, 0]
+            if y.shape[0] > 1
+            else 10 * np.cos(angle)
+        )
+        transform = Affine(
+            column_x,
+            row_x,
+            x[0, 0] - (column_x + row_x) / 2,
+            column_y,
+            row_y,
+            y[0, 0] - (column_y + row_y) / 2,
+        )
+
+        # Earlier polygons win when source features overlap, matching the old loop.
+        shapes = (
+            (geometry, value)
+            for geometry, value in zip(geometries[::-1], values[::-1])
+            if geometry is not None and not geometry.is_empty
+        )
+        return rasterize(
+            shapes,
+            out_shape=x.shape,
+            transform=transform,
+            fill=fill_value,
+            dtype="float32",
+        )
 
     def configure_friction(self, xb_setup):
         # Load the GeoJSON containing manning values
@@ -52,22 +101,11 @@ class XBeachDataLoader:
         )
         print("Original coral area :", self.original_coral_area, "ha.")
 
-        # Load XBeach grid files
-        x = self.project.x_grid
-        y = self.project.y_grid
-        nrows, ncols = x.shape
-
-        # Initialize raster grid
-        friction_grid = np.full((nrows, ncols), self.default_friction, dtype=np.float32)
-
-        # Loop over each cell and assign Manning value from polygon if available
-        for i in tqdm(range(nrows), desc="Interpolating friction values"):
-            for j in range(ncols):
-                pt = Point(x[i, j], y[i, j])
-                for _, row in gdf.iterrows():
-                    if row.geometry.contains(pt):
-                        friction_grid[i, j] = float(row["friction"])
-                        break  # Use the first matching polygon*
+        friction_grid = self.rasterize_polygon_values(
+            gdf.geometry.to_numpy(),
+            gdf["friction"].to_numpy(dtype=np.float32),
+            float(self.default_friction),
+        )
 
         xb_setup.set_friction(friction_grid)
 
@@ -91,19 +129,13 @@ class XBeachDataLoader:
             os.path.join(self.after_restoration_input_folder, "friction.dep")
         )
 
-        # Load XBeach grid files
-        x = self.project.x_grid
-        y = self.project.y_grid
-        nrows, ncols = x.shape
-
-        # Loop over each cell and assign Manning value from polygon if available
-        for i in tqdm(range(nrows), desc="Interpolating friction values"):
-            for j in range(ncols):
-                pt = Point(x[i, j], y[i, j])
-                for _, row in gdf.iterrows():
-                    if row.geometry.contains(pt):
-                        friction_grid[i, j] = float(row["friction"])
-                        break  # Use the first matching polygon
+        restored_friction = self.rasterize_polygon_values(
+            gdf.geometry.to_numpy(),
+            gdf["friction"].to_numpy(dtype=np.float32),
+            np.nan,
+        )
+        restored_cells = np.isfinite(restored_friction)
+        friction_grid[restored_cells] = restored_friction[restored_cells]
 
         xb_setup.set_friction(friction_grid)
 
@@ -137,19 +169,11 @@ class XBeachDataLoader:
         )
         bed_grid = self.project.z_grid.copy()
 
-        # Load XBeach grid files
-        x = self.project.x_grid
-        y = self.project.y_grid
-        nrows, ncols = x.shape
-
-        # Loop over each cell and add height value from polygon if available
-        for i in tqdm(range(nrows), desc="Interpolating bed depth values"):
-            for j in range(ncols):
-                pt = Point(x[i, j], y[i, j])
-                for _, row in gdf.iterrows():
-                    if row.geometry.contains(pt):
-                        bed_grid[i, j] += float(row["height"])
-                        break  # Use the first matching polygon
+        bed_grid += self.rasterize_polygon_values(
+            gdf.geometry.to_numpy(),
+            gdf["height"].to_numpy(dtype=np.float32),
+            0,
+        )
 
         xb_setup.set_grid(
             self.project.x_grid,
