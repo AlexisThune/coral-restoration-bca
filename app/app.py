@@ -492,7 +492,9 @@ if st.session_state.original_coral_cover_set:
                         st.session_state.restored_coral_zone_drawn = False
                         st.rerun()
 
-            if all(zone["validated"] for zone in st.session_state.restored_coral_zones):
+            if st.session_state.restored_coral_zones and all(
+                zone["validated"] for zone in st.session_state.restored_coral_zones
+            ):
                 st.info(
                     "Draw the next zone, or go to the next step with the current ones."
                 )

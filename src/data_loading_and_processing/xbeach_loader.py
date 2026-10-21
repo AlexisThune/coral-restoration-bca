@@ -125,6 +125,12 @@ class XBeachDataLoader:
         gdf = gpd.read_file(
             "src/models/benefits/xbeach_module/after_restoration/input/friction_from_restoration.geojson"
         )
+        if gdf.empty:
+            raise ValueError(
+                "No restored coral zones found. Draw and validate at least one "
+                "restoration zone before launching the simulation."
+            )
+
         friction_grid = np.loadtxt(
             os.path.join(self.after_restoration_input_folder, "friction.dep")
         )
