@@ -51,6 +51,19 @@ class RestorationProject:
             self.location[1] + degree_margin,
         )
 
+    @staticmethod
+    def grid_dimensions(oriented_rect_coords, grid_angle, cell_size=10):
+        rect_poly = Polygon(oriented_rect_coords)
+        minx, miny, _, _ = rect_poly.bounds
+        rect_local = translate(rect_poly, xoff=-minx, yoff=-miny)
+        rect_axis_aligned = rotate(rect_local, -grid_angle, origin=(0, 0))
+
+        gxmin, gymin, gxmax, gymax = rect_axis_aligned.bounds
+        return (
+            max(1, ceil((gxmax - gxmin) / cell_size)),
+            max(1, ceil((gymax - gymin) / cell_size)),
+        )
+
     def _generate_gdf_grid(self, cell_size):
         """to - do :
         - make sure the cells exactly match the bounds, by cutting them or enlarging the bound to have regular cells
@@ -62,8 +75,9 @@ class RestorationProject:
         rect_axis_aligned = rotate(rect_local, -self.grid_angle, origin=(0, 0))
 
         gxmin, gymin, gxmax, gymax = rect_axis_aligned.bounds
-        nx_cells = max(1, ceil((gxmax - gxmin) / cell_size))
-        ny_cells = max(1, ceil((gymax - gymin) / cell_size))
+        nx_cells, ny_cells = self.grid_dimensions(
+            self.oriented_rect_coords, self.grid_angle, cell_size
+        )
 
         grid_polys_local = []
         for i in range(nx_cells):

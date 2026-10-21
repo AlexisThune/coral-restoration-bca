@@ -28,3 +28,12 @@ XBeach requires a structured rectangular grid. The app therefore keeps the
 complete regular grid covering the project area's extent after rotation to the
 selected grid angle; for different area and grid angles, some edge cells can
 extend beyond the drawn area.
+
+## Simulation time estimates
+
+Before a run, the app shows the structured grid size and estimates end-to-end
+runtime by scaling the median runtime per grid cell from successful runs in the
+current Streamlit browser session. The first successful run provides the initial
+calibration. This is an order-of-magnitude estimate, not a solver guarantee:
+XBeach runtime can vary with the machine and model conditions, and the restored
+zone count is shown as context but is not currently part of the scaling formula.

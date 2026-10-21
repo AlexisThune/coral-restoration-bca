@@ -21,6 +21,10 @@ from streamlit_folium import st_folium
 from src.config import load_config
 from src.data_loading_and_processing.coral_loader import load_coral_for_project
 from src.utils.technical_functions import get_epsg, n_closest_points
+from src.utils.simulation_time_estimator import (
+    estimate_runtime_seconds,
+    format_runtime,
+)
 from src.utils.ui import InteractiveMap, RestorationProject, Scenario
 
 SESSION_DEFAULTS = {
@@ -49,6 +53,7 @@ SESSION_DEFAULTS = {
     "user_logged_in_copernicus": False,
     "simulation_completed": False,
     "results": [],
+    "simulation_runtime_samples": [],
 }
 
 
@@ -59,7 +64,7 @@ def init_session_state(defaults):
 
 
 def reset_project_state(keys_to_save):
-    keys_to_save += ["map_center", "map_zoom"]
+    keys_to_save += ["map_center", "map_zoom", "simulation_runtime_samples"]
     for key in SESSION_DEFAULTS.keys():
         if key not in keys_to_save:
             st.session_state[key] = SESSION_DEFAULTS[key]
@@ -630,6 +635,37 @@ if st.session_state.restored_coral_zones_set:
 
 if st.session_state.coral_geojsons_saved:
     ########## Interactions ##########
+    grid_nx, grid_ny = RestorationProject.grid_dimensions(
+        st.session_state.project_area,
+        st.session_state.grid_angle,
+    )
+    grid_cells = grid_nx * grid_ny
+    runtime_samples = st.session_state.simulation_runtime_samples
+    estimated_seconds = estimate_runtime_seconds(grid_cells, runtime_samples)
+
+    st.sidebar.markdown("### Simulation time estimate")
+    st.sidebar.caption(
+        f"Grid: {grid_nx:,} × {grid_ny:,} cells = {grid_cells:,} cells at 10 m; "
+        f"{len(st.session_state.restored_coral_zones)} restored zone(s)."
+    )
+    st.sidebar.caption(
+        "Both scenarios are computed over the full grid, so cell count is the "
+        "main runtime driver; restored-zone size is not a solver shortcut."
+    )
+    if estimated_seconds is None:
+        st.sidebar.info(
+            "No completed simulation in this browser session yet, so there is not "
+            "enough measured data for a reliable time estimate. The first "
+            "successful run will calibrate it."
+        )
+    else:
+        st.sidebar.info(
+            f"Estimated end-to-end time: about {format_runtime(estimated_seconds)} "
+            f"(scaled from {len(runtime_samples)} completed run(s) in this "
+            "browser session). Treat this as an order-of-magnitude estimate; "
+            "actual solver time can vary."
+        )
+
     if st.sidebar.button("Launch simulation", key="launch_simulation"):
         with st.status("Preparing simulation...", expanded=True) as simulation_status:
             simulation_start_time = time.monotonic()
@@ -671,6 +707,17 @@ if st.session_state.coral_geojsons_saved:
             simulation.run(progress_callback=report_simulation_progress)
 
             report_simulation_progress("Simulation workflow completed")
+            completed_runtime = time.monotonic() - simulation_start_time
+            st.session_state.simulation_runtime_samples = [
+                *runtime_samples,
+                {
+                    "grid_cells": grid_cells,
+                    "runtime_seconds": completed_runtime,
+                },
+            ]
+            report_simulation_progress(
+                "Recorded this run to calibrate future time estimates"
+            )
         st.session_state.simulation_completed = True
         st.balloons()
 if st.session_state.simulation_completed:
