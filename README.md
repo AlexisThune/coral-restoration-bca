@@ -48,6 +48,21 @@ The bundled `xbTools` postprocessor uses a Windows path separator when opening
 `XBlog.txt`. The app's small adapter reads this metadata with `pathlib`, which
 works on both Linux and Windows.
 
+## XBeach runtime and CPU use
+
+The baseline and restored scenarios use separate input/output directories, so
+the app runs these two complete XBeach simulations concurrently. This can
+reduce wall-clock time on multi-core machines without reducing either model
+domain. The bundled XBeach executable is currently built in serial mode (no
+MPI or OpenMP); running more solver processes or setting thread counts beyond
+these two scenarios will not parallelize an individual simulation.
+
+On a four-core machine, two concurrent solver processes typically leave CPU
+capacity for the operating system and other work. Docker CPU limits can be set
+at launch, for example with `--cpus=3`, to reserve capacity outside the
+container. More concurrent runs would compete for CPU and memory and are not
+enabled.
+
 ## Simulation time estimates
 
 Before a run, the app shows the structured grid size and estimates end-to-end

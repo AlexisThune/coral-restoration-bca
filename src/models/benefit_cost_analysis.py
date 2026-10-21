@@ -2,6 +2,7 @@ import os
 import subprocess
 import sys
 import time
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Optional
@@ -118,11 +119,6 @@ class CoralRestorationBCA:
             xbeach_exe = resolve_xbeach_executable()
             run_env = build_xbeach_environment(xbeach_exe)
 
-            self._report_progress(
-                progress_callback,
-                f"Running XBeach for the {scenario_name}; the solver may take a while",
-            )
-            started_at = time.monotonic()
             with subprocess.Popen(
                 [str(xbeach_exe)],
                 cwd=input_path,
@@ -131,19 +127,7 @@ class CoralRestorationBCA:
                 text=True,
                 env=run_env,
             ) as process:
-                while True:
-                    try:
-                        output, _ = process.communicate(
-                            timeout=XBEACH_PROGRESS_INTERVAL_SECONDS
-                        )
-                        break
-                    except subprocess.TimeoutExpired:
-                        elapsed = time.monotonic() - started_at
-                        self._report_progress(
-                            progress_callback,
-                            f"XBeach is still running for the {scenario_name} "
-                            f"({elapsed:.0f}s elapsed)",
-                        )
+                output, _ = process.communicate()
 
             if process.returncode != 0:
                 raise RuntimeError(
@@ -151,9 +135,67 @@ class CoralRestorationBCA:
                     f"(exit code {process.returncode}):\n{output}"
                 )
 
-        run_xbeach(after_restoration=False)
-        self._report_progress(progress_callback, "Baseline XBeach simulation finished")
-        run_xbeach(after_restoration=True)
+        scenarios = {
+            False: "baseline scenario",
+            True: "restored scenario",
+        }
+        self._report_progress(
+            progress_callback,
+            "Running baseline and restored XBeach scenarios concurrently "
+            "(two solver processes)",
+        )
+        started_at = time.monotonic()
+        failures = []
+        with ThreadPoolExecutor(
+            max_workers=2, thread_name_prefix="xbeach"
+        ) as executor:
+            future_scenarios = {
+                executor.submit(run_xbeach, after_restoration): scenario_name
+                for after_restoration, scenario_name in scenarios.items()
+            }
+            pending = set(future_scenarios)
+            while pending:
+                completed, pending = wait(
+                    pending,
+                    timeout=XBEACH_PROGRESS_INTERVAL_SECONDS,
+                    return_when=FIRST_COMPLETED,
+                )
+                for future in completed:
+                    scenario_name = future_scenarios[future]
+                    try:
+                        future.result()
+                    except (OSError, RuntimeError) as error:
+                        failures.append((scenario_name, error))
+                        self._report_progress(
+                            progress_callback,
+                            f"XBeach failed for the {scenario_name}: {error}",
+                        )
+                    else:
+                        self._report_progress(
+                            progress_callback,
+                            f"XBeach finished for the {scenario_name}",
+                        )
+
+                if pending:
+                    elapsed = time.monotonic() - started_at
+                    running_scenarios = ", ".join(
+                        future_scenarios[future] for future in pending
+                    )
+                    self._report_progress(
+                        progress_callback,
+                        f"XBeach is still running for {running_scenarios} "
+                        f"({elapsed:.0f}s elapsed)",
+                    )
+
+        if failures:
+            failure_details = "\n".join(
+                f"{scenario_name}: {error}"
+                for scenario_name, error in failures
+            )
+            raise RuntimeError(
+                f"XBeach failed for {len(failures)} scenario(s):\n"
+                f"{failure_details}"
+            ) from failures[0][1]
 
         self._report_progress(progress_callback, "Analyzing baseline XBeach results")
         self.xbeach_results_analyzer.analyze(after_restoration=False)
