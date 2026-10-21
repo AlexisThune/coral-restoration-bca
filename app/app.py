@@ -15,12 +15,18 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 import folium
 import geopandas as gpd
 import numpy as np
-from shapely.geometry import Point, Polygon
+from folium.plugins import PolyLineTextPath
+from shapely.geometry import LineString, Polygon
 from streamlit_folium import st_folium
 
 from src.config import load_config
 from src.data_loading_and_processing.coral_loader import load_coral_for_project
-from src.utils.technical_functions import get_epsg, n_closest_points
+from src.utils.grid_orientation import (
+    grid_angle_from_offshore_edge,
+    infer_offshore_edge,
+    wave_alignment_with_grid,
+)
+from src.utils.technical_functions import get_epsg
 from src.utils.simulation_time_estimator import (
     estimate_runtime_seconds,
     format_runtime,
@@ -38,6 +44,15 @@ SESSION_DEFAULTS = {
     "project_area": None,
     "grid_angle_set": False,
     "grid_angle": None,
+    "offshore_edge_idx": None,
+    "edge_bathy_elevations": None,
+    "orientation_requires_manual": False,
+    "orientation_error": None,
+    "manual_offshore_edge": 0,
+    "wave_hm0": 8.0,
+    "wave_tp": 11.0,
+    "wave_zs0": 0.0,
+    "wave_mainang": 270,
     "wave_conditions_set": False,
     "wave_conditions": None,
     "area_value_set": False,
@@ -86,6 +101,35 @@ def initialize_geojson(name, epsg):
 @st.cache_data(show_spinner="🔍 Loading coral features in project area...")
 def load_project_coral(data_path, project_area_coords, epsg_code):
     return load_coral_for_project(data_path, project_area_coords, epsg_code)
+
+
+@st.cache_data(show_spinner="Estimating the offshore side from bathymetry...")
+def sample_project_edge_bathymetry(bathymetry_path, project_area_coords, epsg_code):
+    from src.data_loading_and_processing.bathymetry_loader import BathymetryDataLoader
+
+    return BathymetryDataLoader.sample_project_area_edges(
+        bathymetry_path, project_area_coords, epsg_code
+    )
+
+
+def add_map_arrow(coordinates, color, tooltip):
+    line = folium.PolyLine(
+        coordinates, color=color, weight=4, opacity=0.9, tooltip=tooltip
+    ).add_to(imap.map)
+    PolyLineTextPath(
+        line,
+        "➤",
+        repeat=False,
+        offset=7,
+        attributes={"fill": color, "font-weight": "bold", "font-size": "20"},
+    ).add_to(imap.map)
+
+
+def project_line_to_map(coordinates, epsg_code):
+    line = gpd.GeoSeries(
+        [LineString(coordinates)], crs=f"EPSG:{epsg_code}"
+    ).to_crs("EPSG:4326").iloc[0]
+    return [(lat, lon) for lon, lat in line.coords]
 
 
 def draw_zones(zones, color, tooltip_prefix, source_epsg):
@@ -202,6 +246,61 @@ if st.session_state.get("project_area_set"):
         tooltip_prefix="Restored zone",
     )
 
+    if st.session_state.grid_angle_set:
+        area_coords = np.asarray(st.session_state.project_area, dtype=float)[:4]
+        offshore_idx = st.session_state.offshore_edge_idx
+        offshore_midpoint = (
+            area_coords[offshore_idx] + area_coords[(offshore_idx + 1) % 4]
+        ) / 2
+        opposite_midpoint = (
+            area_coords[(offshore_idx + 2) % 4]
+            + area_coords[(offshore_idx + 3) % 4]
+        ) / 2
+        add_map_arrow(
+            project_line_to_map(
+                [offshore_midpoint, opposite_midpoint], st.session_state.epsg
+            ),
+            color="#0057b8",
+            tooltip=f"Grid X: offshore to land ({st.session_state.grid_angle:.1f}°)",
+        )
+        folium.PolyLine(
+            project_line_to_map(
+                [
+                    area_coords[offshore_idx],
+                    area_coords[(offshore_idx + 1) % 4],
+                ],
+                st.session_state.epsg,
+            ),
+            color="#0057b8",
+            weight=5,
+            opacity=0.9,
+            tooltip="Offshore boundary inferred from bathymetry",
+        ).add_to(imap.map)
+
+        mainang = st.session_state.wave_mainang
+        propagation_bearing = (mainang + 180) % 360
+        bearing_radians = math.radians(propagation_bearing)
+        center = area_coords.mean(axis=0)
+        arrow_length = min(
+            np.linalg.norm(opposite_midpoint - offshore_midpoint) * 0.35,
+            np.linalg.norm(area_coords[1] - area_coords[0]) * 0.35,
+        )
+        propagation_vector = np.array(
+            [math.sin(bearing_radians), math.cos(bearing_radians)]
+        ) * arrow_length / 2
+        wave_arrow = [
+            center - propagation_vector,
+            center + propagation_vector,
+        ]
+        add_map_arrow(
+            project_line_to_map(wave_arrow, st.session_state.epsg),
+            color="#d62728",
+            tooltip=(
+                f"Wave propagation; mainang={mainang}° nautical "
+                f"(waves come from {(mainang % 360)}°)"
+            ),
+        )
+
 ########## Drawing tools ##########
 imap.add_draw_control()
 
@@ -317,73 +416,146 @@ if st.session_state.location_set:
 ##########  Grid orientation ##########
 if st.session_state.project_area_set:
     with st.sidebar.expander("🗺️ Grid orientation", expanded=True):
-        if not st.session_state.grid_angle_set:
-            if st_data.get("last_active_drawing") is None:
-                st.write(
-                    "Place a marker on the middle of the offshore side of the grey rectangle."
+        if not st.session_state.grid_angle_set and not st.session_state.orientation_requires_manual:
+            bathymetry_path = config["module_path"]["bathymetry_input_path"]
+            try:
+                edge_elevations = sample_project_edge_bathymetry(
+                    bathymetry_path,
+                    tuple(map(tuple, st.session_state.project_area)),
+                    st.session_state.epsg,
                 )
+                st.session_state.edge_bathy_elevations = edge_elevations
+                offshore_edge = infer_offshore_edge(edge_elevations)
+            except ValueError as error:
+                st.session_state.edge_bathy_elevations = None
+                st.session_state.orientation_error = str(error)
+                offshore_edge = None
 
-            elif st_data["last_active_drawing"]["geometry"]["type"] == "Point":
-                # User estimation
-                user_lon, user_lat = st_data["last_active_drawing"]["geometry"][
-                    "coordinates"
-                ]
-
-                user_point = gpd.GeoDataFrame(
-                    geometry=[Point(user_lon, user_lat)], crs="EPSG:4326"
+            if offshore_edge is None:
+                st.session_state.orientation_requires_manual = True
+                st.rerun()
+            else:
+                st.session_state.offshore_edge_idx = offshore_edge
+                st.session_state.grid_angle = grid_angle_from_offshore_edge(
+                    st.session_state.project_area, offshore_edge
                 )
-                user_point_proj = user_point.to_crs(f"EPSG:{st.session_state.epsg}")
-                proj_coords = user_point_proj.geometry.iloc[0].coords[0]
-
-                # Deduction of the offshore side
-                offshore_points = n_closest_points(
-                    proj_coords, st.session_state.project_area[:4], n=2
-                )
-                offshore_midpoint = np.mean(offshore_points, axis=0)
-
-                # Computation of grid angle
-                area_center = np.mean(st.session_state.project_area[:4], axis=0)
-                dx, dy = (
-                    area_center[0] - offshore_midpoint[0],
-                    area_center[1] - offshore_midpoint[1],
-                )
-                st.session_state.grid_angle = math.degrees(math.atan2(dy, dx))
-
-                st.success("Grid oriented")
                 st.session_state.grid_angle_set = True
-        else:
-            st.success("Grid oriented.")
+                st.rerun()
 
+        if st.session_state.orientation_requires_manual:
+            if st.session_state.edge_bathy_elevations is None:
+                st.warning(
+                    "Bathymetry did not identify the offshore side. Choose it "
+                    "manually; no automatic orientation was assumed."
+                )
+                if st.session_state.get("orientation_error"):
+                    st.caption(st.session_state.orientation_error)
+            else:
+                values = ", ".join(
+                    f"side {index + 1}: {elevation:.1f} m"
+                    for index, elevation in enumerate(
+                        st.session_state.edge_bathy_elevations
+                    )
+                )
+                st.warning(
+                    "Bathymetry gives similar elevations for multiple sides. "
+                    f"Choose the offshore side. Edge medians: {values}."
+                )
+            selected_edge = st.selectbox(
+                "Offshore side",
+                options=[0, 1, 2, 3],
+                format_func=lambda edge: f"Side {edge + 1}",
+                key="manual_offshore_edge",
+            )
+            if st.button("✅ Use selected offshore side", key="set_offshore_side"):
+                st.session_state.offshore_edge_idx = selected_edge
+                st.session_state.grid_angle = grid_angle_from_offshore_edge(
+                    st.session_state.project_area, selected_edge
+                )
+                st.session_state.grid_angle_set = True
+                st.session_state.orientation_requires_manual = False
+                st.rerun()
+
+        if st.session_state.grid_angle_set:
+            st.success(
+                f"Grid aligned from offshore to land at "
+                f"{st.session_state.grid_angle:.1f}°."
+            )
 
 ##########  Wave boundary conditions ##########
 if st.session_state.grid_angle_set:
     with st.sidebar.expander("🗺️ Wave boundary conditions", expanded=True):
+        st.write("Adjust values and inspect both direction arrows on the map.")
+        hm0 = st.slider(
+            "Significant wave height Hm0 (m)",
+            0.0,
+            14.0,
+            step=0.1,
+            key="wave_hm0",
+        )
+        tp = st.slider(
+            "Peak wave period Tp (s)", 1.0, 21.0, step=0.1, key="wave_tp"
+        )
+        zs0 = st.slider(
+            "Initial sea level zs0 (m; tide + sea-level rise)",
+            0.0,
+            2.0,
+            step=0.01,
+            key="wave_zs0",
+        )
+        mainang = st.slider(
+            "mainang (nautical degrees; direction waves come from)",
+            0,
+            360,
+            step=1,
+            key="wave_mainang",
+        )
+        st.session_state.wave_conditions = {
+            "Hm0": hm0,
+            "Tp": tp,
+            "zs0": zs0,
+            "mainang": mainang,
+        }
         if not st.session_state.wave_conditions_set:
-            st.write("Define the wave boundary conditions for the simulation.")
-            st.session_state.wave_conditions = {
-                "Hm0": st.slider("Significant wave height (Hm0)", 0.0, 14.0, 8.0, 0.1),
-                "Tp": st.slider("Peak wave period (Tp)", 1.0, 21.0, 11.0, 0.1),
-                "zs0": st.slider(
-                    "Initial sea level (zs0). Include both tide and Sea Level Rise",
-                    0.0,
-                    2.0,
-                    0.0,
-                    0.01,
-                ),
-                "mainang": st.slider(
-                    "Main angle of wave direction (mainang) in nautical degrees",
-                    0,
-                    360,
-                    270,
-                    1,
-                ),
-            }
-            if st.button("✅ Set wave boundary conditions", key="set_wave_conditions"):
+            if st.button(
+                "✅ Set wave boundary conditions", key="set_wave_conditions"
+            ):
                 st.session_state.wave_conditions_set = True
                 st.success("✅ Wave boundary conditions set")
-
         else:
-            st.success("Wave boundary conditions set.")
+            st.success(
+                "Wave boundary conditions set; current slider values are used."
+            )
+
+        alignment = wave_alignment_with_grid(
+            mainang, st.session_state.grid_angle
+        )
+        if hm0 <= 0:
+            st.warning("Hm0 is zero: this run has no imposed wave energy.")
+        if alignment < 0:
+            st.warning(
+                "The wave arrow points away from the landward grid direction. "
+                "Check that mainang and the selected offshore side describe the "
+                "intended wave approach."
+            )
+        if st.session_state.edge_bathy_elevations is not None:
+            offshore_bed = st.session_state.edge_bathy_elevations[
+                st.session_state.offshore_edge_idx
+            ]
+            offshore_depth = max(zs0 - offshore_bed, 0)
+            st.caption(
+                f"Offshore-edge median bed: {offshore_bed:.1f} m; "
+                f"water depth at zs0: {offshore_depth:.1f} m."
+            )
+            if hm0 > offshore_depth:
+                st.warning(
+                    "Hm0 exceeds the estimated water depth at the offshore edge. "
+                    "Review the project boundary, bathymetry datum, and wave input."
+                )
+        st.caption(
+            "These checks flag inconsistencies visible in the inputs; they cannot "
+            "guarantee numerical stability for every XBeach run."
+        )
 
 ##########  Area value ($/m2) ##########
 if st.session_state.wave_conditions_set:

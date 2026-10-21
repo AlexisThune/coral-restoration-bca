@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from pathlib import Path
 
 import contextily as ctx
 import geopandas as gpd
@@ -12,6 +13,20 @@ from tqdm import tqdm
 from xbTools.xbeachpost import XBeachModelAnalysis
 
 from src.utils.ui import RestorationProject
+
+
+class PosixCompatibleXBeachModelAnalysis(XBeachModelAnalysis):
+    def get_metadata(self):
+        metadata_path = Path(self.model_path) / "XBlog.txt"
+        metadata = {}
+        with metadata_path.open() as file:
+            for line in file:
+                if "=" in line:
+                    key, value = line.split("=", 1)
+                    metadata[key.replace(" ", "")] = value.strip()
+                if "Finished reading input parameters" in line:
+                    break
+        self.metadata = metadata
 
 
 @dataclass
@@ -28,7 +43,7 @@ class XBeachResultsAnalyzer:
             analysis_title = "Before Restoration"
 
         # Analyze the results
-        self.results = XBeachModelAnalysis(analysis_title, output_path)
+        self.results = PosixCompatibleXBeachModelAnalysis(analysis_title, output_path)
         self.results.load_model_setup()
 
         # Compute and plot flood maps, i.e where bathymetry is positive and zs too

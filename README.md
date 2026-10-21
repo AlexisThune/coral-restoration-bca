@@ -29,6 +29,25 @@ complete regular grid covering the project area's extent after rotation to the
 selected grid angle; for different area and grid angles, some edge cells can
 extend beyond the drawn area.
 
+## Grid orientation and wave-input checks
+
+The app samples bathymetry along the four project-area edges and uses the
+lowest median bed elevation to identify the offshore edge. If the two lowest
+edge medians differ by less than 1 m, or no edge can be sampled, the user must
+choose the offshore side manually. The map then shows the landward grid axis
+and the wave-propagation arrow. `mainang` is shown in nautical degrees as the
+direction waves come from; the arrow points in the opposite, propagation
+direction.
+
+The UI flags a zero wave height, a wave direction pointing away from the
+landward grid axis, and a wave height greater than the estimated water depth
+at the offshore edge. These are input-consistency warnings, not a prediction
+of XBeach numerical stability.
+
+The bundled `xbTools` postprocessor uses a Windows path separator when opening
+`XBlog.txt`. The app's small adapter reads this metadata with `pathlib`, which
+works on both Linux and Windows.
+
 ## Simulation time estimates
 
 Before a run, the app shows the structured grid size and estimates end-to-end

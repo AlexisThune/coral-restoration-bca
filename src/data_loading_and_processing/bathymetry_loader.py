@@ -6,6 +6,7 @@ import numpy as np
 import shapely.geometry as sg
 import streamlit as st
 import xarray as xr
+from rioxarray.exceptions import NoDataInBounds
 from rasterio.features import shapes
 from scipy.interpolate import griddata
 
@@ -24,6 +25,55 @@ class BathymetryDataLoader:
         self.module_input_path = Path(
             self.config["module_path"]["bathymetry_input_path"]
         )
+
+    @staticmethod
+    def sample_project_area_edges(
+        bathymetry_path, project_area_coords, project_epsg
+    ):
+        project_polygon = gpd.GeoSeries(
+            [sg.Polygon(project_area_coords)], crs=f"EPSG:{project_epsg}"
+        )
+        geographic_bounds = project_polygon.to_crs("EPSG:4326").total_bounds
+        min_lon, min_lat, max_lon, max_lat = geographic_bounds
+
+        try:
+            with xr.open_dataset(bathymetry_path) as ds:
+                bathy = ds["Band1"].rio.write_crs(ds["crs"].attrs["spatial_ref"])
+                bathy = bathy.rio.clip_box(
+                    minx=min_lon - 0.02,
+                    miny=min_lat - 0.02,
+                    maxx=max_lon + 0.02,
+                    maxy=max_lat + 0.02,
+                )
+                projected = bathy.rio.reproject(
+                    dst_crs=project_epsg, resampling=1
+                )
+        except NoDataInBounds as error:
+            raise ValueError(
+                "The project area is outside the available bathymetry coverage."
+            ) from error
+
+        coords = np.asarray(project_area_coords, dtype=float)[:4]
+        sampled_edges = []
+        for edge_index in range(4):
+            start = coords[edge_index]
+            end = coords[(edge_index + 1) % 4]
+            fractions = np.linspace(0.1, 0.9, 9)
+            points = start + fractions[:, None] * (end - start)
+            samples = projected.interp(
+                x=xr.DataArray(points[:, 0], dims="sample"),
+                y=xr.DataArray(points[:, 1], dims="sample"),
+                method="nearest",
+            ).values
+            finite_samples = samples[np.isfinite(samples)]
+            if finite_samples.size == 0:
+                raise ValueError(
+                    "No bathymetry samples were found along project-area edge "
+                    f"{edge_index + 1}."
+                )
+            sampled_edges.append(float(np.median(finite_samples)))
+
+        return sampled_edges
 
     def load_bathy_data(self):
         # Load the main bathymetry data
