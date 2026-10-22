@@ -122,8 +122,7 @@ class InteractiveMap:
     def add_draw_control(self):
         """Add the drawing tool Leaflet Draw."""
         Draw(
-            export=True,
-            filename="data.geojson",
+            export=False,
             draw_options={
                 "polyline": False,
                 "rectangle": False,

@@ -3,3 +3,4 @@
 *.pyc
 data/coral/original_benthic_map.geojson
 output/
+/coral_restoration_simulation_results.zip

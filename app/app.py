@@ -31,6 +31,7 @@ from src.utils.simulation_time_estimator import (
     estimate_runtime_seconds,
     format_runtime,
 )
+from src.utils.results_export import build_results_archive
 from src.utils.ui import InteractiveMap, RestorationProject, Scenario
 
 SESSION_DEFAULTS = {
@@ -68,6 +69,7 @@ SESSION_DEFAULTS = {
     "user_logged_in_copernicus": False,
     "simulation_completed": False,
     "results": [],
+    "results_archive": None,
     "simulation_runtime_samples": [],
 }
 
@@ -839,6 +841,9 @@ if st.session_state.coral_geojsons_saved:
         )
 
     if st.sidebar.button("Launch simulation", key="launch_simulation"):
+        st.session_state.simulation_completed = False
+        st.session_state.results = []
+        st.session_state.results_archive = None
         with st.status("Preparing simulation...", expanded=True) as simulation_status:
             simulation_start_time = time.monotonic()
 
@@ -887,6 +892,30 @@ if st.session_state.coral_geojsons_saved:
                     "runtime_seconds": completed_runtime,
                 },
             ]
+            report_simulation_progress("Packaging simulation results for download")
+            output_paths = config["module_path"]["xbeach_paths"]
+            st.session_state.results_archive = build_results_archive(
+                results=st.session_state.results,
+                output_paths=[
+                    ("before_restoration", output_paths[0]),
+                    ("after_restoration", output_paths[1]),
+                ],
+                metadata={
+                    "runtime_seconds": completed_runtime,
+                    "grid_shape_cells": [grid_nx, grid_ny],
+                    "grid_cell_size_m": 10,
+                    "project_location_lat_lon": [
+                        st.session_state.project_lat,
+                        st.session_state.project_lon,
+                    ],
+                    "epsg": st.session_state.epsg,
+                    "grid_angle_degrees": st.session_state.grid_angle,
+                    "project_area_coordinates_m": st.session_state.project_area,
+                    "wave_conditions": st.session_state.wave_conditions,
+                    "restored_coral_zones": st.session_state.restored_coral_zones,
+                    "area_value_per_m2": st.session_state.area_value,
+                },
+            )
             report_simulation_progress(
                 "Recorded this run to calibrate future time estimates"
             )
@@ -894,6 +923,18 @@ if st.session_state.coral_geojsons_saved:
         st.balloons()
 if st.session_state.simulation_completed:
     st.success("Simulation completed !")
+    if st.session_state.results_archive is not None:
+        st.download_button(
+            "Download simulation results (ZIP)",
+            data=st.session_state.results_archive,
+            file_name="coral_restoration_simulation_results.zip",
+            mime="application/zip",
+            key="download_simulation_results",
+        )
+        st.caption(
+            "The archive includes the summary, result charts, XBeach inputs, logs, "
+            "and NetCDF outputs for both scenarios."
+        )
     for result in st.session_state.results:
         if result["type"] == "writable":
             st.write(result["data"])

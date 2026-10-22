@@ -55,6 +55,12 @@ with NetCDF support; generated model inputs explicitly request
 produced a non-empty `xboutput.nc` and reports the solver log tail if it did
 not.
 
+After a successful run, the app offers a ZIP download containing a JSON
+summary, PNG result charts, and the complete XBeach input/output files for both
+scenarios, including `xboutput.nc`. Download it before stopping a disposable
+Docker container unless its output directories are mounted to persistent
+storage.
+
 ## XBeach runtime and CPU use
 
 The baseline and restored scenarios use separate input/output directories, so

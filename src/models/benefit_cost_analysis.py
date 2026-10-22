@@ -232,6 +232,9 @@ class CoralRestorationBCA:
                 "type": "writable",
                 "data": {
                     "benefits": benefits_str,
+                    "benefits_usd": self.benefits,
+                    "flooded_area_before_ha": self.flooded_area_before,
+                    "flooded_area_after_ha": self.flooded_area_after,
                 },
             }
         )

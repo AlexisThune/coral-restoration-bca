@@ -191,5 +191,8 @@ src/models/benefits/swan_module
 src/models/benefits/xbeach_module/after_restoration/
 src/models/benefits/xbeach_module/before_restoration/
 
+# Generated simulation results archive
+/coral_restoration_simulation_results.zip
+
 # Local parameters
 .vscode/
