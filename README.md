@@ -28,6 +28,8 @@ XBeach requires a structured rectangular grid. The app therefore keeps the
 complete regular grid covering the project area's extent after rotation to the
 selected grid angle; for different area and grid angles, some edge cells can
 extend beyond the drawn area.
+The user draws the model area directly; the app derives its center and UTM
+projection from that polygon, so a separate location marker is not required.
 
 ## Grid orientation and wave-input checks
 

@@ -127,7 +127,7 @@ class InteractiveMap:
                 "polyline": False,
                 "rectangle": False,
                 "circle": False,
-                "marker": True,
+                "marker": False,
                 "circlemarker": False,
                 "polygon": True,
             },

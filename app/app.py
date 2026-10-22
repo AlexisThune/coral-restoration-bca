@@ -197,18 +197,11 @@ st.sidebar.markdown(
 
 
 ########## Add drawings to Map & GeoJSONs ##########
-if st.session_state.get("location_set"):
-    folium.Marker(
-        location=[st.session_state.project_lat, st.session_state.project_lon],
-        tooltip="Project location",
-        icon=folium.Icon(color="blue", icon="map-marker"),
-    ).add_to(imap.map)
-
 if st.session_state.get("project_area_set"):
     # Créer GeoSeries pour reprojection
     gseries = gpd.GeoSeries(
         [Polygon(st.session_state.project_area)],
-        crs=f"EPSG:{SESSION_DEFAULTS['epsg']}",
+        crs=f"EPSG:{st.session_state.epsg}",
     )
     gseries_4326 = gseries.to_crs("EPSG:4326")
     coords_4326 = [(lat, lon) for lon, lat in gseries_4326.iloc[0].exterior.coords]
@@ -236,7 +229,7 @@ if st.session_state.get("project_area_set"):
         gdf_coral_filtered["geometry"],
         color="green",
         tooltip_prefix="Original coral zone",
-        source_epsg=SESSION_DEFAULTS["epsg"],
+        source_epsg=st.session_state.epsg,
     )
 
     st.session_state.friction_before_restoration = gdf_coral_filtered
@@ -318,102 +311,86 @@ st_data = st_folium(
 
 st.sidebar.header("1️⃣ Restoration Project Design")
 
-with st.sidebar.expander("📌 Select location", expanded=True):
-    if not st.session_state.location_set:
-        if st_data.get("last_active_drawing") is None:
+########## Project area definition ##########
+with st.sidebar.expander("🌊 Draw the model area", expanded=True):
+    last_drawing = st_data.get("last_active_drawing")
+    if not st.session_state.project_area_set:
+        if last_drawing is None or last_drawing["geometry"]["type"] != "Polygon":
             st.write(
-                "Please select the location of your restoration project. You must use a marker and place it on the interactive map on the left."
+                "Draw the rectangular model domain directly on the map. This is the "
+                "area XBeach will simulate; it is larger than the restoration zone."
             )
-        elif st_data["last_active_drawing"]["geometry"]["type"] == "Point":
-            st.session_state.project_lon, st.session_state.project_lat = st_data[
-                "last_active_drawing"
-            ]["geometry"]["coordinates"]
-            utm_zone = f"{int((st.session_state.project_lon + 180) / 6) + 1}{'N' if st.session_state.project_lat >= 0 else 'S'}"
-            st.session_state.epsg = get_epsg(utm_zone)
-            st.session_state.location_set = True
-            st.success("Location validated")
             st.info(
-                f"📍 Latitude : {st.session_state.project_lat:.5f}\n📍 Longitude : {st.session_state.project_lon:.5f}\n📍 UTM Zone : {utm_zone}"
+                "Include the reef from its drop-off to the coast, plus the land "
+                "area to be protected. Keep opposite sides roughly parallel to "
+                "the coast and, as a starting guideline, include about 1 km inland. "
+                "Draw four corners; the app will fit a rotated rectangle, derive "
+                "the map projection and center, then show the domain on the map."
             )
-            if st_data.get("center"):
-                st.session_state.map_center = (
-                    st_data["center"]["lat"],
-                    st_data["center"]["lng"],
-                )
-            if st_data.get("zoom"):
-                st.session_state.map_zoom = st_data["zoom"]
-            st.rerun()
         else:
-            st.warning(
-                "You must place a marker. Please clear all drawings using the bin tool."
-            )
+            coords = last_drawing["geometry"]["coordinates"][0]
+
+            if len(coords) - 1 == 4:
+                drawn_polygon = Polygon(coords)
+                if not drawn_polygon.is_valid or drawn_polygon.area <= 0:
+                    st.warning(
+                        "The drawn boundary is invalid. Draw a simple, non-crossing "
+                        "four-sided polygon."
+                    )
+                    st.stop()
+
+                polygon_wgs84 = gpd.GeoDataFrame(
+                    geometry=[drawn_polygon], crs="EPSG:4326"
+                )
+                center_wgs84 = polygon_wgs84.geometry.iloc[0].representative_point()
+                center_lon = center_wgs84.x
+                center_lat = center_wgs84.y
+                utm_zone = (
+                    f"{int((center_lon + 180) / 6) + 1}"
+                    f"{'N' if center_lat >= 0 else 'S'}"
+                )
+                epsg = get_epsg(utm_zone)
+                polygon_projected = polygon_wgs84.to_crs(f"EPSG:{epsg}")
+                project_rectangle = (
+                    polygon_projected.geometry.iloc[0].minimum_rotated_rectangle
+                )
+                project_center_wgs84 = gpd.GeoSeries(
+                    [project_rectangle.centroid], crs=f"EPSG:{epsg}"
+                ).to_crs("EPSG:4326").iloc[0]
+
+                st.session_state.epsg = epsg
+                st.session_state.project_lat = project_center_wgs84.y
+                st.session_state.project_lon = project_center_wgs84.x
+                st.session_state.location_set = True
+                st.session_state.project_area_set = True
+                st.session_state.project_area = np.array(
+                    project_rectangle.exterior.coords
+                )
+
+                if st_data.get("center"):
+                    st.session_state.map_center = (
+                        st_data["center"]["lat"],
+                        st_data["center"]["lng"],
+                    )
+                if st_data.get("zoom"):
+                    st.session_state.map_zoom = st_data["zoom"]
+                st.rerun()
+            else:
+                st.warning("Draw a polygon with exactly four sides.")
 
     else:
-        st.success("Location validated")
-        st.info(
-            f"📍 Latitude : {st.session_state.project_lat:.5f}\n"
-            f"📍 Longitude : {st.session_state.project_lon:.5f}"
+        area_hectares = (
+            Polygon(st.session_state.project_area).area / 10_000
         )
-        if st.button("🔄 Reset location", key="reset_location"):
+        st.success("Model area set.")
+        st.caption(
+            f"Area: {area_hectares:.1f} ha. Center: "
+            f"{st.session_state.project_lat:.4f}, "
+            f"{st.session_state.project_lon:.4f}; projection EPSG:"
+            f"{st.session_state.epsg}."
+        )
+        if st.button("🔄 Reset model area", key="reset_project_area"):
             reset_project_state(keys_to_save=[])
-
-
-########## Project area definition ##########
-if st.session_state.location_set:
-    with st.sidebar.expander("🌊 Define the Project area", expanded=True):
-        last_drawing = st_data.get("last_active_drawing")
-        if not st.session_state.project_area_set:
-            if last_drawing is None or last_drawing["geometry"]["type"] != "Polygon":
-                st.write(
-                    "Please draw the project area with the polygon tool. You must draw a rectangle, and double-click when placing the fourth point to finish the polygon creation."
-                )
-                st.info(
-                    "The area should include all the corals to be restored, and the land which is to be protected from flooding. \n"
-                    "We recommend keeping 2 opposing sides of the area roughly parallel to the coast\n"
-                    "and including at least 1 km of inland depth, and the full coral reef until the reef drop-off."
-                )
-            else:
-                coords = last_drawing["geometry"]["coordinates"][0]
-
-                if len(coords) - 1 == 4:  # closed polygon, 5 points (last = first)
-                    # Get projected coordinates
-                    polyg_gdf = gpd.GeoDataFrame(
-                        geometry=[Polygon(coords)], crs="EPSG:4326"
-                    )
-                    polyg_gdf_proj = polyg_gdf.to_crs(f"EPSG:{st.session_state.epsg}")
-                    proj_coords = list(polyg_gdf_proj.geometry.iloc[0].exterior.coords)
-                    proj_polyg = Polygon(proj_coords)
-
-                    # Force the area to be a rectangle
-                    min_rect = proj_polyg.minimum_rotated_rectangle
-                    project_area_coords = np.array(min_rect.exterior.coords)
-                    st.session_state.project_area_set = True
-                    st.session_state.project_area = project_area_coords
-                    st.success("✅ Project area set")
-
-                    if st_data.get("center"):
-                        st.session_state.map_center = (
-                            st_data["center"]["lat"],
-                            st_data["center"]["lng"],
-                        )
-                    if st_data.get("zoom"):
-                        st.session_state.map_zoom = st_data["zoom"]
-                    st.rerun()
-                else:
-                    st.warning("Please draw a 4 sides polygon.")
-
-        else:
-            st.success("✅ Project area set.")
-            st.info("You can now proceed to the next step.")
-            if st.button("🔄 Reset project area zone", key="reset_project_area"):
-                reset_project_state(
-                    keys_to_save=[
-                        "location_set",
-                        "project_lat",
-                        "project_lon",
-                        "epsg",
-                    ]
-                )
 
 ##########  Grid orientation ##########
 if st.session_state.project_area_set:
