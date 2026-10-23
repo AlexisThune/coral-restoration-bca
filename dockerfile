@@ -25,7 +25,11 @@ RUN pip3 install --no-cache-dir -r requirements.txt
 
 # 3. Cloner et compiler XBeach (qui a maintenant accès à mako)
 WORKDIR /opt
-RUN git clone https://github.com/openearth/xbeach.git
+ARG XBEACH_COMMIT=6f1dd9626f57cdc0a5b306f5975ba4ce0d7a5a29
+RUN git init /opt/xbeach \
+    && git -C /opt/xbeach remote add origin https://github.com/openearth/xbeach.git \
+    && git -C /opt/xbeach fetch --depth 1 origin "${XBEACH_COMMIT}" \
+    && git -C /opt/xbeach checkout --detach FETCH_HEAD
 RUN sed -i 's/character(kind=c_char, len=\([^)]*\))/character(kind=c_char), dimension(\1)/g' /opt/xbeach/src/xbeachlibrary/mnemoniciso.F90 \
     && sed -i 's/dimension(20), dimension(maxrank)/dimension(20, maxrank)/' /opt/xbeach/src/xbeachlibrary/mnemoniciso.F90
 
@@ -40,6 +44,9 @@ RUN mkdir -p /opt/xbeach_output && cp /opt/xbeach/src/xbeach/xbeach /opt/xbeach_
 # 4. Finaliser l'application
 WORKDIR /opt/app
 COPY . /opt/app
+
+RUN useradd --create-home --uid 10001 --shell /usr/sbin/nologin appuser
+USER appuser
 
 EXPOSE 8501
 CMD ["streamlit", "run", "app/app.py", "--server.address=0.0.0.0", "--server.port=8501"]

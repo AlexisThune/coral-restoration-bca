@@ -1,6 +1,10 @@
 .git
 *__pycache__*
 *.pyc
+/.venv/
+/.env*
 data/coral/original_benthic_map.geojson
+src/models/benefits/xbeach_module/XBeach/
 output/
 /coral_restoration_simulation_results.zip
+.env.pilot

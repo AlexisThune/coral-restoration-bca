@@ -61,12 +61,16 @@ class XBeachResultsAnalyzer:
         flood_mask = flood_map.astype(bool)
         flood_levels = np.where(flood_mask, zs_flood - zb_flood, 0)
 
-        # Print naive maximum water height
-        max_water_level = np.max(zs_flood[flood_mask])
-        print(f"Maximum water level: {max_water_level:.2f} m")
+        if flood_mask.any():
+            max_water_level = np.max(zs_flood[flood_mask])
+            print(f"Maximum water level: {max_water_level:.2f} m")
 
-        max_water_level = np.max(zs_flood[flood_mask] - zb_flood[flood_mask])
-        print(f"Maximum flood height: {max_water_level:.2f} m")
+            max_flood_height = np.max(
+                zs_flood[flood_mask] - zb_flood[flood_mask]
+            )
+            print(f"Maximum flood height: {max_flood_height:.2f} m")
+        else:
+            print("No flooded land cells detected in the final output.")
 
         # Coordonnées des centres de cellules
         X = self.results.grd["x"]
@@ -92,10 +96,12 @@ class XBeachResultsAnalyzer:
         print(f"Original land area: {original_land_area:.2f} ha")
         print(f"Flooded area : {self.flooded_area:.2f} ha")
 
-        self.plot_flood_map(flood_map, sea_mask)
-        self.plot_flood_levels_satellite(X, Y, flood_levels)
+        self.plot_flood_map(flood_map, sea_mask, analysis_title)
+        self.plot_flood_levels_satellite(
+            X, Y, flood_levels, analysis_title, epsg_in=self.project.epsg
+        )
 
-    def plot_flood_map(self, flood_map, sea_mask):
+    def plot_flood_map(self, flood_map, sea_mask, analysis_title):
         fig, ax = plt.subplots(figsize=(10, 8))
 
         # Fond : mer et terre
@@ -130,12 +136,8 @@ class XBeachResultsAnalyzer:
         # Légende
         plt.colorbar(pc, ax=ax, label="Flooded areas")
 
-        ax.set_title("Flood map")
+        ax.set_title(f"{analysis_title}: flooded area")
 
-        # Affichage dans Streamlit
-        st.pyplot(fig)
-
-        # Stockage du résultat
         st.session_state.results.append(
             {
                 "type": "plottable",
@@ -143,7 +145,9 @@ class XBeachResultsAnalyzer:
             }
         )
 
-    def plot_flood_levels_satellite(self, x, y, flood_levels, epsg_in=32706):
+    def plot_flood_levels_satellite(
+        self, x, y, flood_levels, analysis_title, epsg_in
+    ):
         # Définir les couleurs par palier
         colors = [
             "darkblue",  # 0
@@ -193,9 +197,7 @@ class XBeachResultsAnalyzer:
         ax.set_ylim(lat.min(), lat.max())
         ax.set_xlabel("Longitude")
         ax.set_ylabel("Latitude")
-        ax.set_title("Flood map (satellite background)")
-
-        st.pyplot(fig)
+        ax.set_title(f"{analysis_title}: flood depth (satellite)")
 
         st.session_state.results.append(
             {

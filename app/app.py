@@ -2,6 +2,7 @@ import json
 import math
 import os
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -9,8 +10,17 @@ import streamlit as st
 
 st.set_page_config(page_title="BCA Model for coral restoration projects", layout="wide")
 st.title("BCA Model for coral restoration projects")
+st.info(
+    "Private research pilot for the Society Islands dataset. Runs can take "
+    "several minutes or longer. Results are exploratory and require expert "
+    "review; they are not validated engineering or investment advice."
+)
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+from src.utils.pilot_access import require_pilot_access
+
+require_pilot_access()
 
 import folium
 import geopandas as gpd
@@ -71,6 +81,14 @@ SESSION_DEFAULTS = {
     "results": [],
     "results_archive": None,
     "simulation_runtime_samples": [],
+    "run_workspace": None,
+}
+
+BATHYMETRY_COVERAGE_BOUNDS = {
+    "min_lat": -19.05,
+    "max_lat": -15.55,
+    "min_lon": -153.1,
+    "max_lon": -147.5,
 }
 
 
@@ -81,7 +99,12 @@ def init_session_state(defaults):
 
 
 def reset_project_state(keys_to_save):
-    keys_to_save += ["map_center", "map_zoom", "simulation_runtime_samples"]
+    keys_to_save += [
+        "map_center",
+        "map_zoom",
+        "simulation_runtime_samples",
+        "run_workspace",
+    ]
     for key in SESSION_DEFAULTS.keys():
         if key not in keys_to_save:
             st.session_state[key] = SESSION_DEFAULTS[key]
@@ -164,6 +187,13 @@ def draw_zones_with_validation(
 
 ########## Page configuration ##########
 init_session_state(SESSION_DEFAULTS)
+if st.session_state.run_workspace is None:
+    st.session_state.run_workspace = tempfile.mkdtemp(prefix="coral-restoration-")
+run_workspace = Path(st.session_state.run_workspace)
+before_restoration_input = run_workspace / "before_restoration" / "input"
+after_restoration_input = run_workspace / "after_restoration" / "input"
+before_restoration_input.mkdir(parents=True, exist_ok=True)
+after_restoration_input.mkdir(parents=True, exist_ok=True)
 config = load_config(config_path="src/config.json")
 
 
@@ -312,7 +342,9 @@ st_data = st_folium(
 st.sidebar.header("1️⃣ Restoration Project Design")
 
 ########## Project area definition ##########
-with st.sidebar.expander("🌊 Draw the model area", expanded=True):
+with st.sidebar.expander(
+    "🌊 Draw the model area", expanded=not st.session_state.project_area_set
+):
     last_drawing = st_data.get("last_active_drawing")
     if not st.session_state.project_area_set:
         if last_drawing is None or last_drawing["geometry"]["type"] != "Polygon":
@@ -342,6 +374,21 @@ with st.sidebar.expander("🌊 Draw the model area", expanded=True):
                 polygon_wgs84 = gpd.GeoDataFrame(
                     geometry=[drawn_polygon], crs="EPSG:4326"
                 )
+                min_lon, min_lat, max_lon, max_lat = polygon_wgs84.total_bounds
+                if (
+                    min_lon < BATHYMETRY_COVERAGE_BOUNDS["min_lon"]
+                    or max_lon > BATHYMETRY_COVERAGE_BOUNDS["max_lon"]
+                    or min_lat < BATHYMETRY_COVERAGE_BOUNDS["min_lat"]
+                    or max_lat > BATHYMETRY_COVERAGE_BOUNDS["max_lat"]
+                ):
+                    st.error(
+                        "This model area is outside the available bathymetry "
+                        "coverage for the Society Islands. Draw a smaller area "
+                        "inside the blue coverage boundary."
+                    )
+                    st.info("Delete the invalid shape with the map's trash tool and redraw it.")
+                    st.stop()
+
                 center_wgs84 = polygon_wgs84.geometry.iloc[0].representative_point()
                 center_lon = center_wgs84.x
                 center_lat = center_wgs84.y
@@ -394,7 +441,10 @@ with st.sidebar.expander("🌊 Draw the model area", expanded=True):
 
 ##########  Grid orientation ##########
 if st.session_state.project_area_set:
-    with st.sidebar.expander("🗺️ Grid orientation", expanded=True):
+    with st.sidebar.expander(
+        "🗺️ Grid orientation",
+        expanded=not st.session_state.grid_angle_set,
+    ):
         if not st.session_state.grid_angle_set and not st.session_state.orientation_requires_manual:
             bathymetry_path = config["module_path"]["bathymetry_input_path"]
             try:
@@ -463,7 +513,10 @@ if st.session_state.project_area_set:
 
 ##########  Wave boundary conditions ##########
 if st.session_state.grid_angle_set:
-    with st.sidebar.expander("🗺️ Wave boundary conditions", expanded=True):
+    with st.sidebar.expander(
+        "🗺️ Wave boundary conditions",
+        expanded=not st.session_state.wave_conditions_set,
+    ):
         st.write("Adjust values and inspect both direction arrows on the map.")
         hm0 = st.slider(
             "Significant wave height Hm0 (m)",
@@ -538,7 +591,10 @@ if st.session_state.grid_angle_set:
 
 ##########  Area value ($/m2) ##########
 if st.session_state.wave_conditions_set:
-    with st.sidebar.expander("🗺️ Area value ($/m2)", expanded=True):
+    with st.sidebar.expander(
+        "🗺️ Area value ($/m2)",
+        expanded=not st.session_state.area_value_set,
+    ):
         if not st.session_state.area_value_set:
             st.write("Define the area value for the simulation.")
             st.session_state.area_value = st.slider(
@@ -553,7 +609,10 @@ if st.session_state.wave_conditions_set:
 
 ##########  Original coral cover estimation ##########
 if st.session_state.area_value_set:
-    with st.sidebar.expander("🪸 Original coral cover estimation", expanded=True):
+    with st.sidebar.expander(
+        "🪸 Original coral cover estimation",
+        expanded=not st.session_state.original_coral_cover_set,
+    ):
         st.write("Estimate the original coral cover within the project area.")
         original_coral_cover = st.slider(
             "Original coral cover (%)",
@@ -571,7 +630,8 @@ if st.session_state.area_value_set:
 ########## Future restored coral zones ##########
 if st.session_state.original_coral_cover_set:
     with st.sidebar.expander(
-        "🪸🔧 Define the future restored coral zones", expanded=True
+        "🪸🔧 Define the future restored coral zones",
+        expanded=not st.session_state.restored_coral_zones_set,
     ):
         last_drawing = st_data.get("last_active_drawing")
 
@@ -731,7 +791,7 @@ if st.session_state.restored_coral_zones_set:
             st.session_state.height_from_restoration["features"].append(height_feature)
 
     # Save GeoJSONs
-    output_dir = Path(__file__).parent.parent / "src/models/benefits/xbeach_module"
+    output_dir = run_workspace
 
     st.session_state.friction_before_restoration["friction"] = config[
         "Coral cover to friction coefficient (% to dimensionless)"
@@ -852,13 +912,22 @@ if st.session_state.coral_geojsons_saved:
             report_simulation_progress("Loading simulation and XBeach modules")
             from src.models.benefit_cost_analysis import CoralRestorationBCA
 
+            simulation_config = json.loads(json.dumps(config))
+            simulation_config["module_path"]["xbeach_paths"] = [
+                str(before_restoration_input),
+                str(after_restoration_input),
+            ]
             simulation = CoralRestorationBCA(
-                config=config,
+                config=simulation_config,
                 scenario=Scenario(discount_rate=0.1),
                 restoration_project=project,
             )
             simulation.load_data(progress_callback=report_simulation_progress)
-            simulation.run(progress_callback=report_simulation_progress)
+            try:
+                simulation.run(progress_callback=report_simulation_progress)
+            except RuntimeError as error:
+                st.error(str(error))
+                st.stop()
 
             report_simulation_progress("Simulation workflow completed")
             completed_runtime = time.monotonic() - simulation_start_time
@@ -870,12 +939,11 @@ if st.session_state.coral_geojsons_saved:
                 },
             ]
             report_simulation_progress("Packaging simulation results for download")
-            output_paths = config["module_path"]["xbeach_paths"]
             st.session_state.results_archive = build_results_archive(
                 results=st.session_state.results,
                 output_paths=[
-                    ("before_restoration", output_paths[0]),
-                    ("after_restoration", output_paths[1]),
+                    ("before_restoration", str(before_restoration_input)),
+                    ("after_restoration", str(after_restoration_input)),
                 ],
                 metadata={
                     "runtime_seconds": completed_runtime,
@@ -914,6 +982,22 @@ if st.session_state.simulation_completed:
         )
     for result in st.session_state.results:
         if result["type"] == "writable":
-            st.write(result["data"])
+            metrics = result["data"]
+            st.subheader("Simulation summary")
+            metric_columns = st.columns(3)
+            metric_columns[0].metric(
+                "Indicative benefit", f"${metrics['benefits_usd']:,.0f}"
+            )
+            metric_columns[1].metric(
+                "Flooded area before", f"{metrics['flooded_area_before_ha']:.2f} ha"
+            )
+            metric_columns[2].metric(
+                "Flooded area after", f"{metrics['flooded_area_after_ha']:.2f} ha"
+            )
+            st.caption(
+                "Indicative benefit is calculated from the change in modeled "
+                "flooded area and the selected area value. It does not include "
+                "restoration costs or discounting."
+            )
         elif result["type"] == "plottable":
             st.pyplot(result["data"])

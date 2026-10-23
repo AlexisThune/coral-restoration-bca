@@ -1,6 +1,7 @@
 import json
 import os
 from dataclasses import dataclass
+from pathlib import Path
 
 import geopandas as gpd
 import numpy as np
@@ -79,11 +80,11 @@ class XBeachDataLoader:
         )
 
     def configure_friction(self, xb_setup):
-        # Load the GeoJSON containing manning values
-        with open(
-            "src/models/benefits/xbeach_module/after_restoration/input/friction_before_restoration.geojson",
-            "r",
-        ) as f:
+        friction_path = (
+            Path(self.after_restoration_input_folder)
+            / "friction_before_restoration.geojson"
+        )
+        with friction_path.open("r") as f:
             geojson_str = f.read()
             geojson_dict = json.loads(json.loads(geojson_str))
         gdf = gpd.GeoDataFrame.from_features(geojson_dict["features"])
@@ -121,10 +122,11 @@ class XBeachDataLoader:
         self.save_friction(after_restoration_path, friction_grid)
 
     def update_friction(self, xb_setup):
-        # Load the GeoJSON containing manning values and the previous .dep file
-        gdf = gpd.read_file(
-            "src/models/benefits/xbeach_module/after_restoration/input/friction_from_restoration.geojson"
+        restoration_friction_path = (
+            Path(self.after_restoration_input_folder)
+            / "friction_from_restoration.geojson"
         )
+        gdf = gpd.read_file(restoration_friction_path)
         if gdf.empty:
             raise ValueError(
                 "No restored coral zones found. Draw and validate at least one "
@@ -169,10 +171,11 @@ class XBeachDataLoader:
                 f.write(" ".join(f"{val:.4f}" for val in row) + "\n")
 
     def update_bed(self, xb_setup):
-        # Load the GeoJSON containing manning values and the previous .dep file
-        gdf = gpd.read_file(
-            "src/models/benefits/xbeach_module/after_restoration/input/height_from_restoration.geojson"
+        restoration_height_path = (
+            Path(self.after_restoration_input_folder)
+            / "height_from_restoration.geojson"
         )
+        gdf = gpd.read_file(restoration_height_path)
         bed_grid = self.project.z_grid.copy()
 
         bed_grid += self.rasterize_polygon_values(

@@ -1,6 +1,7 @@
 import os
 import subprocess
 import sys
+import threading
 import time
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from dataclasses import dataclass
@@ -16,6 +17,7 @@ from src.utils.ui import RestorationProject, Scenario
 
 xbeach_dir = Path(__file__).parent / "benefits" / "xbeach_module" / "XBeach"
 XBEACH_PROGRESS_INTERVAL_SECONDS = 30
+_simulation_lock = threading.Lock()
 
 
 def resolve_xbeach_executable():
@@ -108,6 +110,19 @@ class CoralRestorationBCA:
         self._report_progress(progress_callback, "Simulation inputs are ready")
 
     def run(self, progress_callback: Optional[Callable[[str], None]] = None) -> None:
+        if not _simulation_lock.acquire(blocking=False):
+            raise RuntimeError(
+                "Another XBeach simulation is already running on this pilot "
+                "instance. Please wait for it to finish, then try again."
+            )
+        try:
+            self._run_locked(progress_callback)
+        finally:
+            _simulation_lock.release()
+
+    def _run_locked(
+        self, progress_callback: Optional[Callable[[str], None]] = None
+    ) -> None:
         def run_xbeach(after_restoration: bool):
             if after_restoration:
                 input_path = self.config["module_path"]["xbeach_paths"][1]

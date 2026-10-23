@@ -86,3 +86,36 @@ current Streamlit browser session. The first successful run provides the initial
 calibration. This is an order-of-magnitude estimate, not a solver guarantee:
 XBeach runtime can vary with the machine and model conditions, and the restored
 zone count is shown as context but is not currently part of the scaling formula.
+
+## Private pilot deployment
+
+The application requires `PILOT_PASSWORD` to be set; it refuses to serve the
+simulation UI when the variable is missing. For local Docker testing, place a
+long, random password in an ignored `.env.pilot` file and pass it with
+`--env-file .env.pilot`. Do not commit or share that file. Put the Streamlit
+service behind HTTPS before sharing its URL; the app-level password does not
+encrypt network traffic. Send the URL and password to pilot users through
+separate channels.
+
+Run locally with:
+
+```sh
+docker run --rm --name coral-app --env-file .env.pilot \
+  --cpus=3 -p 127.0.0.1:8501:8501 coral-app:pilot
+```
+
+Each browser session writes XBeach inputs and outputs into its own temporary
+workspace. A process-local lock allows only one XBeach analysis at a time in a
+single app instance. For the pilot, use one container replica; this lock does
+not coordinate multiple containers. Temporary workspaces and in-memory
+downloads are not durable and are lost on container restart. Users should
+download the results archive before the service is restarted.
+The image runs the application as a non-root user.
+The Docker build fetches XBeach at a fixed commit so rebuilding the pilot does
+not silently change the solver source revision.
+
+Before inviting external users, verify the deployment's HTTPS, access policy,
+resource limits, restart behavior, and retention policy. This is a research
+pilot: numerical stability, geographic coverage, and economic interpretation
+must be reviewed for each use; outputs are not professional engineering or
+investment advice.
